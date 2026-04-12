@@ -1,0 +1,94 @@
+# Job Auto-Apply Bot Configuration
+
+# Job search settings
+search:
+  titles:
+    - Software Engineer
+    - Backend Developer
+    - Full Stack Developer
+    - Node.js Developer
+    - MERN Stack Developer
+    - JavaScript Developer
+    - Angular Developer
+    - Software Developer
+  locations:
+    - Bangalore
+    - Hyderabad
+    - Chennai
+    - Pune
+    - Mumbai
+    - Delhi NCR
+    - Noida
+    - Gurugram
+    - Kolkata
+    - India Remote
+  experience_years: 4
+  
+# Skills to prioritize (auto-extracted from resume, but you can add more)
+extra_skills:
+  - JavaScript
+  - TypeScript
+  - Node.js
+  - Angular
+  - React
+  - Express
+  - MongoDB
+  - Redis
+  - Docker
+  - Kubernetes
+  - REST API
+  - Git
+  - JWT
+  - Jest
+  - CSS
+
+# Matching thresholds
+matching:
+  min_score: 40          # Minimum match score (0-100) to auto-apply
+  min_skills_match: 1    # At least 1 skill from resume should match
+  
+# Platforms to scrape
+platforms:
+  linkedin:
+    enabled: true
+    easy_apply_only: true   # Only apply to Easy Apply jobs
+    max_applications_per_run: 10
+  naukri:
+    enabled: true
+    max_applications_per_run: 15
+  indeed:
+    enabled: true
+    max_applications_per_run: 10
+
+# Filters
+filters:
+  exclude_companies:
+    - "Spam Company"
+  exclude_titles:
+    - intern
+    - trainee
+    - fresher
+    - junior
+    - entry level
+    - 0-1 years
+    - 1-2 years
+    - 8+ years
+    - 10+ years
+    - principal
+    - director
+    - vp
+  min_salary: 0          # 0 means no minimum
+  max_days_posted: 7     # Only apply to jobs posted within last N days
+  
+# Email notification settings
+notifications:
+  on_manual_action_needed: true
+  on_successful_apply: true
+  daily_summary: true
+  daily_summary_time: "20:00"
+
+# Browser automation settings  
+browser:
+  page_load_timeout: 30
+  implicit_wait: 10
+  max_retries: 3
