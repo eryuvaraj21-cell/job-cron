@@ -35,11 +35,6 @@ jobs:
           key: jobs-db-${{ github.run_id }}
           restore-keys: jobs-db-
 
-      - name: Add resume
-        run: |
-          mkdir -p resume
-          echo "${{ secrets.RESUME_BASE64 }}" | base64 -d > resume/resume.pdf
-
       - name: Create .env
         run: |
           cat <<EOF > .env
