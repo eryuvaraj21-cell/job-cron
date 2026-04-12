@@ -22,7 +22,6 @@ from src.resume_parser import ResumeParser
 from src.job_matcher import JobMatcher
 from src.job_scraper.linkedin import LinkedInScraper
 from src.job_scraper.naukri import NaukriScraper
-from src.job_scraper.indeed import IndeedScraper
 from src.job_scraper.glassdoor import GlassdoorScraper
 from src.job_scraper.foundit import FounditScraper
 from src.job_scraper.timesjobs import TimesJobsScraper
@@ -246,18 +245,6 @@ def run_job_cycle():
             platform_configs["naukri"],
             os.getenv("NAUKRI_EMAIL", ""),
             os.getenv("NAUKRI_PASSWORD", ""),
-            profile, matcher, resume_path, notifier,
-        )
-        all_applied.extend(applied)
-        all_manual_needed.extend(manual)
-
-    # ── Indeed ──
-    if platform_configs.get("indeed", {}).get("enabled", False):
-        scraper = IndeedScraper(headless=headless, chrome_binary=chrome_binary)
-        applied, manual = process_platform(
-            scraper,
-            platform_configs["indeed"],
-            "", "",
             profile, matcher, resume_path, notifier,
         )
         all_applied.extend(applied)

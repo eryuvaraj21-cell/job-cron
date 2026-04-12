@@ -15,13 +15,6 @@ search:
     - Bangalore
     - Hyderabad
     - Chennai
-    - Pune
-    - Mumbai
-    - Delhi NCR
-    - Noida
-    - Gurugram
-    - Kolkata
-    - India Remote
   experience_years: 4
   
 # Skills to prioritize (auto-extracted from resume, but you can add more)
@@ -56,9 +49,6 @@ platforms:
   naukri:
     enabled: true
     max_applications_per_run: 15
-  indeed:
-    enabled: true
-    max_applications_per_run: 10
   glassdoor:
     enabled: true
     max_applications_per_run: 10
