@@ -23,6 +23,23 @@ from src.job_matcher import JobMatcher
 from src.job_scraper.linkedin import LinkedInScraper
 from src.job_scraper.naukri import NaukriScraper
 from src.job_scraper.indeed import IndeedScraper
+from src.job_scraper.glassdoor import GlassdoorScraper
+from src.job_scraper.foundit import FounditScraper
+from src.job_scraper.timesjobs import TimesJobsScraper
+from src.job_scraper.shine import ShineScraper
+from src.job_scraper.instahyre import InstahyreScraper
+from src.job_scraper.wellfound import WellfoundScraper
+from src.job_scraper.simplyhired import SimplyHiredScraper
+from src.job_scraper.hirist import HiristScraper
+from src.job_scraper.cutshort import CutShortScraper
+from src.job_scraper.google_jobs import GoogleJobsScraper
+from src.job_scraper.jooble import JoobleScraper
+from src.job_scraper.adzuna import AdzunaScraper
+from src.job_scraper.careerjet import CareerJetScraper
+from src.job_scraper.talent import TalentScraper
+from src.job_scraper.dice import DiceScraper
+from src.job_scraper.freshersworld import FreshersworldScraper
+from src.job_scraper.jobrapido import JobrapidoScraper
 from src.email_notifier import EmailNotifier
 from src import database as db
 
@@ -240,12 +257,72 @@ def run_job_cycle():
         applied, manual = process_platform(
             scraper,
             platform_configs["indeed"],
-            "",  # Indeed doesn't require login for search
-            "",
+            "", "",
             profile, matcher, resume_path, notifier,
         )
         all_applied.extend(applied)
         all_manual_needed.extend(manual)
+
+    # ── Glassdoor ──
+    if platform_configs.get("glassdoor", {}).get("enabled", False):
+        scraper = GlassdoorScraper(headless=headless, chrome_binary=chrome_binary)
+        applied, manual = process_platform(
+            scraper, platform_configs["glassdoor"], "", "",
+            profile, matcher, resume_path, notifier,
+        )
+        all_applied.extend(applied)
+        all_manual_needed.extend(manual)
+
+    # ── Wellfound (AngelList) ──
+    if platform_configs.get("wellfound", {}).get("enabled", False):
+        scraper = WellfoundScraper(headless=headless, chrome_binary=chrome_binary)
+        applied, manual = process_platform(
+            scraper, platform_configs["wellfound"], "", "",
+            profile, matcher, resume_path, notifier,
+        )
+        all_applied.extend(applied)
+        all_manual_needed.extend(manual)
+
+    # ── Google Jobs ──
+    if platform_configs.get("google_jobs", {}).get("enabled", False):
+        scraper = GoogleJobsScraper(headless=headless, chrome_binary=chrome_binary)
+        applied, manual = process_platform(
+            scraper, platform_configs["google_jobs"], "", "",
+            profile, matcher, resume_path, notifier,
+        )
+        all_applied.extend(applied)
+        all_manual_needed.extend(manual)
+
+    # ── Request-based scrapers (no browser needed, faster) ──
+    request_scrapers = {
+        "foundit": FounditScraper,
+        "timesjobs": TimesJobsScraper,
+        "shine": ShineScraper,
+        "instahyre": InstahyreScraper,
+        "simplyhired": SimplyHiredScraper,
+        "hirist": HiristScraper,
+        "cutshort": CutShortScraper,
+        "jooble": JoobleScraper,
+        "adzuna": AdzunaScraper,
+        "careerjet": CareerJetScraper,
+        "talent": TalentScraper,
+        "dice": DiceScraper,
+        "freshersworld": FreshersworldScraper,
+        "jobrapido": JobrapidoScraper,
+    }
+
+    for name, ScraperClass in request_scrapers.items():
+        if platform_configs.get(name, {}).get("enabled", False):
+            try:
+                scraper = ScraperClass()
+                applied, manual = process_platform(
+                    scraper, platform_configs[name], "", "",
+                    profile, matcher, resume_path, notifier,
+                )
+                all_applied.extend(applied)
+                all_manual_needed.extend(manual)
+            except Exception as e:
+                logger.error(f"[{name}] Scraper failed: {e}")
 
     # ── Send notifications ──
     notify_config = CONFIG.get("notifications", {})

@@ -44,19 +44,70 @@ extra_skills:
 
 # Matching thresholds
 matching:
-  min_score: 40          # Minimum match score (0-100) to auto-apply
-  min_skills_match: 1    # At least 1 skill from resume should match
+  min_score: 70          # Minimum match score (0-100) to auto-apply
+  min_skills_match: 2    # At least 2 skills from resume should match
   
 # Platforms to scrape
 platforms:
   linkedin:
     enabled: true
-    easy_apply_only: true   # Only apply to Easy Apply jobs
+    easy_apply_only: true
     max_applications_per_run: 10
   naukri:
     enabled: true
     max_applications_per_run: 15
   indeed:
+    enabled: true
+    max_applications_per_run: 10
+  glassdoor:
+    enabled: true
+    max_applications_per_run: 10
+  foundit:
+    enabled: true
+    max_applications_per_run: 10
+  timesjobs:
+    enabled: true
+    max_applications_per_run: 10
+  shine:
+    enabled: true
+    max_applications_per_run: 10
+  instahyre:
+    enabled: true
+    max_applications_per_run: 10
+  wellfound:
+    enabled: true
+    max_applications_per_run: 10
+  simplyhired:
+    enabled: true
+    max_applications_per_run: 10
+  hirist:
+    enabled: true
+    max_applications_per_run: 10
+  cutshort:
+    enabled: true
+    max_applications_per_run: 10
+  google_jobs:
+    enabled: true
+    max_applications_per_run: 10
+  jooble:
+    enabled: true
+    max_applications_per_run: 10
+  adzuna:
+    enabled: true
+    max_applications_per_run: 10
+  careerjet:
+    enabled: true
+    max_applications_per_run: 10
+  talent:
+    enabled: true
+    max_applications_per_run: 10
+  dice:
+    enabled: true
+    max_applications_per_run: 10
+  freshersworld:
+    enabled: true
+    max_applications_per_run: 10
+  jobrapido:
     enabled: true
     max_applications_per_run: 10
 

@@ -175,7 +175,22 @@ class JobMatcher:
         # Score the job
         score = self.score_job(job)
 
+        # Check minimum skills match
+        job_text = f"{job.get('title', '')} {job.get('description', '')}".lower()
+        job_skills = job.get("skills_required", [])
+        if isinstance(job_skills, str):
+            job_skills = [s.strip() for s in job_skills.split(",") if s.strip()]
+        job_skill_set = set(s.lower() for s in job_skills)
+        for skill in self.all_skills:
+            pattern = r"\b" + re.escape(skill) + r"\b"
+            if re.search(pattern, job_text):
+                job_skill_set.add(skill)
+        matched_skills = self.all_skills.intersection(job_skill_set)
+
+        if len(matched_skills) < self.min_skills_match:
+            return False, score, f"Only {len(matched_skills)} skill(s) match (need {self.min_skills_match})"
+
         if score >= self.min_score:
-            return True, score, f"Score {score:.0f} >= threshold {self.min_score}"
+            return True, score, f"Score {score:.0f} >= threshold {self.min_score}, {len(matched_skills)} skills matched"
         else:
             return False, score, f"Score {score:.0f} < threshold {self.min_score}"
