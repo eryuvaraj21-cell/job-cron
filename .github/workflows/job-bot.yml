@@ -37,18 +37,21 @@ jobs:
 
       - name: Create .env
         run: |
-          echo "LINKEDIN_EMAIL=${{ secrets.LINKEDIN_EMAIL }}" >> .env
-          echo "LINKEDIN_PASSWORD=${{ secrets.LINKEDIN_PASSWORD }}" >> .env
-          echo "NAUKRI_EMAIL=${{ secrets.NAUKRI_EMAIL }}" >> .env
-          echo "NAUKRI_PASSWORD=${{ secrets.NAUKRI_PASSWORD }}" >> .env
-          echo "SMTP_HOST=smtp.gmail.com" >> .env
-          echo "SMTP_PORT=587" >> .env
-          echo "SMTP_EMAIL=${{ secrets.SMTP_EMAIL }}" >> .env
-          echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" >> .env
-          echo "NOTIFY_EMAIL=${{ secrets.NOTIFY_EMAIL }}" >> .env
-          echo "RESUME_PATH=resume/resume.pdf" >> .env
-          echo "BROWSER_HEADLESS=true" >> .env
-          echo "CRON_INTERVAL_MINUTES=9999" >> .env
+          cat > .env << 'ENVEOF'
+          LINKEDIN_EMAIL=eryuvaraj21@gmail.com
+          LINKEDIN_PASSWORD=PSEue1-8xypL1qU
+          NAUKRI_EMAIL=eryuvaraj21@gmail.com
+          NAUKRI_PASSWORD=jw8jZKhL%y.RJb$
+          SMTP_HOST=smtp.gmail.com
+          SMTP_PORT=587
+          SMTP_EMAIL=yuva21052000@gmail.com
+          SMTP_PASSWORD=fsnu zrrt ycli zjpi
+          NOTIFY_EMAIL=eryuvaraj21@gmail.com
+          RESUME_PATH=resume/resume.pdf
+          BROWSER_HEADLESS=true
+          CRON_INTERVAL_MINUTES=9999
+          ENVEOF
+          sed -i 's/^[[:space:]]*//' .env
 
       - name: Run one cycle
         run: python src/run_once.py
