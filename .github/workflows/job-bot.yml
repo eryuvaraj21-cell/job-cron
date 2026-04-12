@@ -51,5 +51,5 @@ jobs:
           echo "CRON_INTERVAL_MINUTES=9999" >> .env
 
       - name: Run one cycle
-        run: python -c "from src.main import run_job_cycle, db; db.init_db(); run_job_cycle()"
+        run: python src/run_once.py
         timeout-minutes: 20
