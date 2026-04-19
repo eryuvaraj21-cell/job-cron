@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 
 
@@ -26,6 +27,24 @@ class BaseScraper(ABC):
         self.headless = headless
         self.chrome_binary = chrome_binary
         self.driver = None
+        self._keep_open_on_failure = False
+        self.otp_config = None  # dict: imap_host, imap_port, email, password, timeout
+
+    def fetch_otp_from_email(self, sender_filters=None, subject_keywords=None):
+        """Fetch the most recent OTP from the configured Gmail mailbox."""
+        if not self.otp_config:
+            logger.warning(f"[{self.PLATFORM_NAME}] OTP config not set; cannot auto-fetch OTP")
+            return None
+        from src.otp_fetcher import fetch_otp
+        return fetch_otp(
+            imap_host=self.otp_config["imap_host"],
+            imap_port=self.otp_config["imap_port"],
+            email_user=self.otp_config["email"],
+            email_password=self.otp_config["password"],
+            sender_filters=sender_filters or [],
+            subject_keywords=subject_keywords or [],
+            timeout_seconds=self.otp_config.get("timeout", 120),
+        )
 
     def _create_driver(self) -> webdriver.Chrome:
         """Create a Chrome WebDriver instance."""
@@ -67,6 +86,13 @@ class BaseScraper(ABC):
     def stop(self):
         """Stop the browser."""
         if self.driver:
+            if self._keep_open_on_failure and not self.headless:
+                logger.warning(
+                    f"[{self.PLATFORM_NAME}] Login needs manual action - leaving browser open. "
+                    f"Close it manually when done."
+                )
+                self.driver = None
+                return
             try:
                 self.driver.quit()
             except Exception:
@@ -96,6 +122,72 @@ class BaseScraper(ABC):
         for _ in range(times):
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(pause)
+
+    def _type_into(self, element, text: str, per_char_delay: float = 0.05) -> bool:
+        """
+        Reliably type text into an input. Works on React/JS-controlled fields by:
+        1) Scrolling into view and focusing
+        2) Clearing existing value
+        3) Typing char-by-char with small delay
+        4) Verifying value; falling back to native value setter + input/change events
+        Returns True if final value matches text.
+        """
+        if not text:
+            return False
+        try:
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", element
+            )
+        except Exception:
+            pass
+        try:
+            element.click()
+        except Exception:
+            try:
+                ActionChains(self.driver).move_to_element(element).click().perform()
+            except Exception:
+                pass
+        try:
+            element.clear()
+        except Exception:
+            pass
+        try:
+            self.driver.execute_script("arguments[0].value = '';", element)
+        except Exception:
+            pass
+        try:
+            for ch in text:
+                element.send_keys(ch)
+                time.sleep(per_char_delay)
+        except Exception:
+            pass
+        try:
+            if (element.get_attribute("value") or "") == text:
+                return True
+        except Exception:
+            pass
+        try:
+            self.driver.execute_script(
+                """
+                const el = arguments[0];
+                const val = arguments[1];
+                const proto = el.tagName === 'TEXTAREA'
+                    ? window.HTMLTextAreaElement.prototype
+                    : window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+                setter.call(el, val);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                element,
+                text,
+            )
+        except Exception:
+            return False
+        try:
+            return (element.get_attribute("value") or "") == text
+        except Exception:
+            return False
 
     @abstractmethod
     def login(self, email: str, password: str) -> bool:

@@ -9,6 +9,13 @@ import signal
 from pathlib import Path
 from datetime import datetime
 
+# Force UTF-8 output on Windows so emoji/unicode log lines don't crash
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 import yaml
 from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -22,25 +29,47 @@ from src.resume_parser import ResumeParser
 from src.job_matcher import JobMatcher
 from src.job_scraper.linkedin import LinkedInScraper
 from src.job_scraper.naukri import NaukriScraper
-from src.job_scraper.glassdoor import GlassdoorScraper
-from src.job_scraper.foundit import FounditScraper
-from src.job_scraper.timesjobs import TimesJobsScraper
-from src.job_scraper.shine import ShineScraper
-from src.job_scraper.instahyre import InstahyreScraper
-from src.job_scraper.wellfound import WellfoundScraper
-from src.job_scraper.simplyhired import SimplyHiredScraper
-from src.job_scraper.hirist import HiristScraper
-from src.job_scraper.cutshort import CutShortScraper
-from src.job_scraper.google_jobs import GoogleJobsScraper
-from src.job_scraper.jooble import JoobleScraper
-from src.job_scraper.adzuna import AdzunaScraper
-from src.job_scraper.careerjet import CareerJetScraper
-from src.job_scraper.talent import TalentScraper
-from src.job_scraper.dice import DiceScraper
-from src.job_scraper.freshersworld import FreshersworldScraper
-from src.job_scraper.jobrapido import JobrapidoScraper
 from src.email_notifier import EmailNotifier
 from src import database as db
+
+# ─── HARDCODED CONFIG (edit these values directly) ─────────────────
+# WARNING: credentials are stored in plain text. Do not commit this file.
+HARDCODED = {
+    # Profile
+    "YOUR_NAME": "Yuvaraj Durairaj",
+    "YOUR_EMAIL": "eryuvaraj21@gmail.com",
+    "YOUR_PHONE": "+91-9999999999",
+
+    # LinkedIn
+    "LINKEDIN_EMAIL": "eryuvaraj21@gmail.com",
+    "LINKEDIN_PASSWORD": "PSEue1-8xypL1qU",
+
+    # Naukri
+    "NAUKRI_EMAIL": "eryuvaraj21@gmail.com",
+    "NAUKRI_PASSWORD": "jw8jZKhL%y.RJb$",
+
+    # Email notifications (optional - leave blank to disable)
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": 587,
+    "SMTP_EMAIL": "yuva21052000@gmail.com",
+    "SMTP_PASSWORD": "fsnu zrrt ycli zjpi",
+    "NOTIFY_EMAIL": "eryuvaraj21@gmail.com",
+
+    # OTP fetcher (Gmail IMAP) - used when LinkedIn/Naukri ask for OTP
+    "OTP_EMAIL": "eryuvaraj21@gmail.com",
+    "OTP_PASSWORD": "yvjh crqz hufk qput",
+    "IMAP_HOST": "imap.gmail.com",
+    "IMAP_PORT": 993,
+    "OTP_TIMEOUT_SECONDS": 120,
+
+    # Resume + browser
+    "RESUME_PATH": "resume/resume.pdf",
+    "BROWSER_HEADLESS": False,
+    "CHROME_BINARY_PATH": "",
+
+    # Scheduler
+    "CRON_INTERVAL_MINUTES": 30,
+}
 
 # ─── Load configuration ────────────────────────────────────────────
 
@@ -62,7 +91,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     handlers=[
-        logging.FileHandler(LOG_DIR / f"bot_{datetime.now().strftime('%Y%m%d')}.log"),
+        logging.FileHandler(LOG_DIR / f"bot_{datetime.now().strftime('%Y%m%d')}.log", encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -73,21 +102,21 @@ logger = logging.getLogger("job-bot")
 
 def get_notifier() -> EmailNotifier:
     return EmailNotifier(
-        smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com"),
-        smtp_port=int(os.getenv("SMTP_PORT", "587")),
-        smtp_email=os.getenv("SMTP_EMAIL", ""),
-        smtp_password=os.getenv("SMTP_PASSWORD", ""),
-        notify_email=os.getenv("NOTIFY_EMAIL", ""),
+        smtp_host=HARDCODED["SMTP_HOST"],
+        smtp_port=int(HARDCODED["SMTP_PORT"]),
+        smtp_email=HARDCODED["SMTP_EMAIL"],
+        smtp_password=HARDCODED["SMTP_PASSWORD"],
+        notify_email=HARDCODED["NOTIFY_EMAIL"],
     )
 
 
 def get_resume_profile():
-    resume_path = os.getenv("RESUME_PATH", "resume/resume.pdf")
+    resume_path = HARDCODED["RESUME_PATH"]
     full_path = PROJECT_ROOT / resume_path
 
     if not full_path.exists():
         logger.error(f"Resume not found at: {full_path}")
-        logger.error("Place your resume in the 'resume/' folder and update RESUME_PATH in .env")
+        logger.error("Place your resume in the 'resume/' folder and update RESUME_PATH in src/main.py HARDCODED")
         return None
 
     parser = ResumeParser(str(full_path))
@@ -122,24 +151,50 @@ def process_platform(scraper, platform_config, email, password, profile, matcher
             notifier.notify_login_required(platform_name, "Login failed - check credentials")
             return applied_jobs, manual_needed_jobs
 
+        # Stash profile experience for form-fillers
+        try:
+            scraper._profile_years = int(getattr(profile, "experience_years", 0) or 0)
+        except Exception:
+            scraper._profile_years = 0
+
         # Search for jobs using configured titles and locations
         all_jobs = []
         search_titles = CONFIG.get("search", {}).get("titles", [])
         search_locations = CONFIG.get("search", {}).get("locations", [])
 
-        for title in search_titles:
-            for location in search_locations:
-                if applied_count >= max_applications:
-                    break
+        # For Naukri, use the "Recommended jobs for you" page instead of keyword search
+        if platform_name == "naukri" and hasattr(scraper, "get_recommended_jobs"):
+            logger.info(f"[{platform_name}] Fetching Recommended jobs for you")
+            try:
+                rec_jobs = scraper.get_recommended_jobs(max_pages=10)
+                all_jobs.extend(rec_jobs)
+            except Exception as e:
+                logger.error(f"[{platform_name}] Failed to fetch recommended jobs: {e}", exc_info=True)
+        else:
+            for title in search_titles:
+                for location in search_locations:
+                    if applied_count >= max_applications:
+                        break
 
-                logger.info(f"[{platform_name}] Searching: '{title}' in '{location}'")
-                jobs = scraper.search_jobs(title, location)
-                all_jobs.extend(jobs)
+                    logger.info(f"[{platform_name}] Searching: '{title}' in '{location}'")
+                    jobs = scraper.search_jobs(title, location)
+                    all_jobs.extend(jobs)
 
-        logger.info(f"[{platform_name}] Total jobs found: {len(all_jobs)}")
+        # Deduplicate by URL and skip jobs without a URL
+        seen_urls = set()
+        unique_jobs = []
+        for j in all_jobs:
+            u = j.get("url")
+            if not u or not isinstance(u, str):
+                continue
+            if u in seen_urls:
+                continue
+            seen_urls.add(u)
+            unique_jobs.append(j)
+        logger.info(f"[{platform_name}] Total jobs found: {len(all_jobs)} (unique: {len(unique_jobs)})")
 
         # Process each job
-        for job in all_jobs:
+        for job in unique_jobs:
             if applied_count >= max_applications:
                 logger.info(f"[{platform_name}] Reached max applications per run ({max_applications})")
                 break
@@ -150,8 +205,13 @@ def process_platform(scraper, platform_config, email, password, profile, matcher
             if db.job_exists(job_url):
                 continue
 
-            # Score and match
-            should_apply, score, reason = matcher.should_apply(job)
+            logger.info(f"[{platform_name}] Evaluating: {job.get('title','')} @ {job.get('company','')} -> {job_url}")
+
+            # Score and match (Naukri recommended jobs bypass matcher - apply to all)
+            if platform_name == "naukri":
+                should_apply, score, reason = True, 100, "Naukri recommended job"
+            else:
+                should_apply, score, reason = matcher.should_apply(job)
             job["match_score"] = score
 
             # Save to database
@@ -215,9 +275,17 @@ def run_job_cycle():
 
     matcher = JobMatcher(profile, CONFIG)
     notifier = get_notifier()
-    resume_path = os.getenv("RESUME_PATH", "resume/resume.pdf")
-    headless = os.getenv("BROWSER_HEADLESS", "true").lower() == "true"
-    chrome_binary = os.getenv("CHROME_BINARY_PATH", "")
+    resume_path = HARDCODED["RESUME_PATH"]
+    headless = bool(HARDCODED["BROWSER_HEADLESS"])
+    chrome_binary = HARDCODED["CHROME_BINARY_PATH"]
+
+    otp_config = {
+        "imap_host": HARDCODED["IMAP_HOST"],
+        "imap_port": int(HARDCODED["IMAP_PORT"]),
+        "email": HARDCODED["OTP_EMAIL"],
+        "password": HARDCODED["OTP_PASSWORD"],
+        "timeout": int(HARDCODED["OTP_TIMEOUT_SECONDS"]),
+    }
 
     all_applied = []
     all_manual_needed = []
@@ -227,11 +295,12 @@ def run_job_cycle():
     # ── LinkedIn ──
     if platform_configs.get("linkedin", {}).get("enabled", False):
         scraper = LinkedInScraper(headless=headless, chrome_binary=chrome_binary)
+        scraper.otp_config = otp_config
         applied, manual = process_platform(
             scraper,
             platform_configs["linkedin"],
-            os.getenv("LINKEDIN_EMAIL", ""),
-            os.getenv("LINKEDIN_PASSWORD", ""),
+            HARDCODED["LINKEDIN_EMAIL"],
+            HARDCODED["LINKEDIN_PASSWORD"],
             profile, matcher, resume_path, notifier,
         )
         all_applied.extend(applied)
@@ -240,76 +309,16 @@ def run_job_cycle():
     # ── Naukri ──
     if platform_configs.get("naukri", {}).get("enabled", False):
         scraper = NaukriScraper(headless=headless, chrome_binary=chrome_binary)
+        scraper.otp_config = otp_config
         applied, manual = process_platform(
             scraper,
             platform_configs["naukri"],
-            os.getenv("NAUKRI_EMAIL", ""),
-            os.getenv("NAUKRI_PASSWORD", ""),
+            HARDCODED["NAUKRI_EMAIL"],
+            HARDCODED["NAUKRI_PASSWORD"],
             profile, matcher, resume_path, notifier,
         )
         all_applied.extend(applied)
         all_manual_needed.extend(manual)
-
-    # ── Glassdoor ──
-    if platform_configs.get("glassdoor", {}).get("enabled", False):
-        scraper = GlassdoorScraper(headless=headless, chrome_binary=chrome_binary)
-        applied, manual = process_platform(
-            scraper, platform_configs["glassdoor"], "", "",
-            profile, matcher, resume_path, notifier,
-        )
-        all_applied.extend(applied)
-        all_manual_needed.extend(manual)
-
-    # ── Wellfound (AngelList) ──
-    if platform_configs.get("wellfound", {}).get("enabled", False):
-        scraper = WellfoundScraper(headless=headless, chrome_binary=chrome_binary)
-        applied, manual = process_platform(
-            scraper, platform_configs["wellfound"], "", "",
-            profile, matcher, resume_path, notifier,
-        )
-        all_applied.extend(applied)
-        all_manual_needed.extend(manual)
-
-    # ── Google Jobs ──
-    if platform_configs.get("google_jobs", {}).get("enabled", False):
-        scraper = GoogleJobsScraper(headless=headless, chrome_binary=chrome_binary)
-        applied, manual = process_platform(
-            scraper, platform_configs["google_jobs"], "", "",
-            profile, matcher, resume_path, notifier,
-        )
-        all_applied.extend(applied)
-        all_manual_needed.extend(manual)
-
-    # ── Request-based scrapers (no browser needed, faster) ──
-    request_scrapers = {
-        "foundit": FounditScraper,
-        "timesjobs": TimesJobsScraper,
-        "shine": ShineScraper,
-        "instahyre": InstahyreScraper,
-        "simplyhired": SimplyHiredScraper,
-        "hirist": HiristScraper,
-        "cutshort": CutShortScraper,
-        "jooble": JoobleScraper,
-        "adzuna": AdzunaScraper,
-        "careerjet": CareerJetScraper,
-        "talent": TalentScraper,
-        "dice": DiceScraper,
-        "freshersworld": FreshersworldScraper,
-        "jobrapido": JobrapidoScraper,
-    }
-
-    for name, ScraperClass in request_scrapers.items():
-        if platform_configs.get(name, {}).get("enabled", False):
-            try:
-                scraper = ScraperClass()
-                applied, manual = process_platform(
-                    scraper, platform_configs[name], "", "",
-                    profile, matcher, resume_path, notifier,
-                )
-                all_applied.extend(applied)
-                all_manual_needed.extend(manual)
-            except Exception as e:
-                logger.error(f"[{name}] Scraper failed: {e}")
 
     # ── Send notifications ──
     notify_config = CONFIG.get("notifications", {})
@@ -345,15 +354,15 @@ def main():
     logger.info("Database initialized")
 
     # Validate resume exists
-    resume_path = os.getenv("RESUME_PATH", "resume/resume.pdf")
+    resume_path = HARDCODED["RESUME_PATH"]
     full_resume_path = PROJECT_ROOT / resume_path
     if not full_resume_path.exists():
         logger.error(f"Resume not found: {full_resume_path}")
         logger.error("Please place your resume (PDF/DOCX) in the 'resume/' folder")
-        logger.error("Then set RESUME_PATH in .env (e.g., RESUME_PATH=resume/resume.pdf)")
+        logger.error("Then update RESUME_PATH in src/main.py HARDCODED")
         sys.exit(1)
 
-    interval = int(os.getenv("CRON_INTERVAL_MINUTES", "30"))
+    interval = int(HARDCODED["CRON_INTERVAL_MINUTES"])
 
     scheduler = BlockingScheduler()
 
@@ -389,7 +398,7 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     logger.info(f"Scheduler started: running every {interval} minutes")
-    logger.info(f"Notifications will be sent to: {os.getenv('NOTIFY_EMAIL', 'not configured')}")
+    logger.info(f"Notifications will be sent to: {HARDCODED['NOTIFY_EMAIL'] or 'not configured'}")
     logger.info("Press Ctrl+C to stop")
 
     try:

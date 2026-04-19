@@ -3,18 +3,10 @@
 # Job search settings
 search:
   titles:
-    - Software Engineer
-    - Backend Developer
-    - Full Stack Developer
     - Node.js Developer
-    - MERN Stack Developer
-    - JavaScript Developer
-    - Angular Developer
-    - Software Developer
+    - Backend Developer
   locations:
     - Bangalore
-    - Hyderabad
-    - Chennai
   experience_years: 4
   
 # Skills to prioritize (auto-extracted from resume, but you can add more)
@@ -37,8 +29,8 @@ extra_skills:
 
 # Matching thresholds
 matching:
-  min_score: 70          # Minimum match score (0-100) to auto-apply
-  min_skills_match: 2    # At least 2 skills from resume should match
+  min_score: 0           # Apply to anything matched
+  min_skills_match: 0    # Don't require skill overlap
   
 # Platforms to scrape
 platforms:
@@ -48,78 +40,16 @@ platforms:
     max_applications_per_run: 10
   naukri:
     enabled: true
-    max_applications_per_run: 15
-  glassdoor:
-    enabled: true
-    max_applications_per_run: 10
-  foundit:
-    enabled: true
-    max_applications_per_run: 10
-  timesjobs:
-    enabled: true
-    max_applications_per_run: 10
-  shine:
-    enabled: true
-    max_applications_per_run: 10
-  instahyre:
-    enabled: true
-    max_applications_per_run: 10
-  wellfound:
-    enabled: true
-    max_applications_per_run: 10
-  simplyhired:
-    enabled: true
-    max_applications_per_run: 10
-  hirist:
-    enabled: true
-    max_applications_per_run: 10
-  cutshort:
-    enabled: true
-    max_applications_per_run: 10
-  google_jobs:
-    enabled: true
-    max_applications_per_run: 10
-  jooble:
-    enabled: true
-    max_applications_per_run: 10
-  adzuna:
-    enabled: true
-    max_applications_per_run: 10
-  careerjet:
-    enabled: true
-    max_applications_per_run: 10
-  talent:
-    enabled: true
-    max_applications_per_run: 10
-  dice:
-    enabled: true
-    max_applications_per_run: 10
-  freshersworld:
-    enabled: true
-    max_applications_per_run: 10
-  jobrapido:
-    enabled: true
-    max_applications_per_run: 10
+    max_applications_per_run: 100
 
 # Filters
 filters:
-  exclude_companies:
-    - "Spam Company"
+  exclude_companies: []
   exclude_titles:
     - intern
     - trainee
-    - fresher
-    - junior
-    - entry level
-    - 0-1 years
-    - 1-2 years
-    - 8+ years
-    - 10+ years
-    - principal
-    - director
-    - vp
   min_salary: 0          # 0 means no minimum
-  max_days_posted: 7     # Only apply to jobs posted within last N days
+  max_days_posted: 30    # Only apply to jobs posted within last N days
   
 # Email notification settings
 notifications:
