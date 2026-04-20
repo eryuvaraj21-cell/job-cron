@@ -505,30 +505,53 @@ class NaukriScraper(BaseScraper):
     def apply_to_job(self, job: dict, resume_path: str) -> dict:
         """Apply to a job on Naukri."""
         try:
-            self._safe_get(job["url"], wait_seconds=3)
-            time.sleep(2)
+            self._safe_get(job["url"], wait_seconds=4)
+            time.sleep(3)
+
+            # Dismiss any interstitial / login popup that may overlay the page
+            for dismiss_sel in [
+                "button.close-btn", "span.close-btn", "button[class*='close']",
+                "button.crossIcon", "span.crossIcon", "span[class*='cross']",
+                "div[class*='modal'] button", "div[class*='overlay'] button",
+            ]:
+                try:
+                    el = self.driver.find_element(By.CSS_SELECTOR, dismiss_sel)
+                    if el.is_displayed():
+                        el.click()
+                        time.sleep(1)
+                        break
+                except Exception:
+                    pass
 
             # Get job description
             try:
                 desc_el = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "div.job-desc, section.job-desc, div.jd-desc"
+                    "div.job-desc, section.job-desc, div.jd-desc, div[class*='jobDescriptionText']"
                 )
                 job["description"] = desc_el.text.strip()
             except NoSuchElementException:
                 job["description"] = ""
 
-            # Look for Apply button
+            # Look for Apply button — ordered from most-specific to most-generic
             apply_btn = None
             apply_selectors = [
+                # Current Naukri (2025-2026) class patterns
+                "button[class*='apply-button']",
+                "button[class*='applyButton']",
+                "button[class*='apply_button']",
+                "a[class*='apply-button']",
+                "a[class*='applyButton']",
+                # Naukri CSS-module hashed classes contain these substrings
+                "button[class*='styles_apply']",
+                "a[class*='styles_apply']",
+                "button[class*='jhc__apply']",
+                # Legacy selectors kept for fallback
                 "button#apply-button",
                 "button.apply-button",
                 "button[id*='apply']",
                 "a[id*='apply']",
                 "button.chatbot-apply",
-                "button.styles_apply-button__uJI_J",
-                "button[class*='apply-button']",
-                "button[class*='Apply']",
             ]
 
             for selector in apply_selectors:
@@ -546,14 +569,14 @@ class NaukriScraper(BaseScraper):
                 except Exception:
                     continue
 
-            # Text-based fallback
+            # Text-based fallback — broaden text variants
             if not apply_btn:
                 try:
-                    btns = self.driver.find_elements(By.XPATH, "//button | //a")
+                    btns = self.driver.find_elements(By.XPATH, "//button | //a[@role='button'] | //a[contains(@class,'btn')]")
                     for b in btns:
                         try:
                             txt = (b.text or "").strip().lower()
-                            if txt in ("apply", "apply now", "easy apply", "i'm interested"):
+                            if txt in ("apply", "apply now", "easy apply", "i'm interested", "apply on company site", "apply externally"):
                                 if b.is_displayed():
                                     apply_btn = b
                                     break
@@ -573,7 +596,13 @@ class NaukriScraper(BaseScraper):
                     "message": f"No apply button found. May require external application: {job['url']}",
                 }
 
-            apply_btn.click()
+            # Scroll the button into view and click
+            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", apply_btn)
+            time.sleep(0.5)
+            try:
+                apply_btn.click()
+            except ElementClickInterceptedException:
+                self.driver.execute_script("arguments[0].click();", apply_btn)
             time.sleep(3)
 
             # Check if it opened an external link or a form
@@ -590,7 +619,7 @@ class NaukriScraper(BaseScraper):
             try:
                 chatbot = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "div.chatbot_container, div.questionnaire, form.apply-form"
+                    "div.chatbot_container, div.questionnaire, form.apply-form, div[class*='chatbot']"
                 )
                 if chatbot.is_displayed():
                     return {
