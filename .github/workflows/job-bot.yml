@@ -28,13 +28,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Restore database
-        uses: actions/cache@v4
-        with:
-          path: data/
-          key: jobs-db-${{ github.run_id }}
-          restore-keys: jobs-db-
-
       - name: Create .env
         run: |
           cat > .env << 'ENVEOF'

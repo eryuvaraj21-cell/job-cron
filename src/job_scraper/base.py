@@ -3,6 +3,8 @@ Base Job Scraper - Abstract class for all job platform scrapers.
 """
 
 import logging
+import os
+import tempfile
 import time
 from abc import ABC, abstractmethod
 
@@ -55,9 +57,17 @@ class BaseScraper(ABC):
 
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-infobars")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--remote-debugging-port=0")
         options.add_argument("--window-size=1920,1080")
+        # Unique user-data-dir avoids "user data directory already in use" crashes
+        # that surface as "Chrome instance exited" in CI runners.
+        self._user_data_dir = tempfile.mkdtemp(prefix="chrome-profile-")
+        options.add_argument(f"--user-data-dir={self._user_data_dir}")
         options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -98,6 +108,11 @@ class BaseScraper(ABC):
             except Exception:
                 pass
             self.driver = None
+            user_data_dir = getattr(self, "_user_data_dir", None)
+            if user_data_dir and os.path.isdir(user_data_dir):
+                import shutil
+                shutil.rmtree(user_data_dir, ignore_errors=True)
+                self._user_data_dir = None
             logger.info(f"[{self.PLATFORM_NAME}] Browser stopped")
 
     def _safe_get(self, url: str, wait_seconds: int = 3):
