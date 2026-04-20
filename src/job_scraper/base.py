@@ -102,6 +102,34 @@ class BaseScraper(ABC):
 
         return driver
 
+    def _ensure_session(self):
+        """Check that the driver session is alive; restart if not."""
+        if self.driver is None:
+            self.start()
+            return
+        try:
+            # Accessing window_handles is a lightweight liveness probe
+            _ = self.driver.window_handles
+        except Exception:
+            self._restart_driver()
+
+    def _restart_driver(self):
+        """Quit the current (dead) session and start a fresh one."""
+        logger.warning(f"[{self.PLATFORM_NAME}] Restarting crashed browser session")
+        try:
+            if self.driver:
+                self.driver.quit()
+        except Exception:
+            pass
+        self.driver = None
+        user_data_dir = getattr(self, "_user_data_dir", None)
+        if user_data_dir and os.path.isdir(user_data_dir):
+            import shutil
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+            self._user_data_dir = None
+        self.driver = self._create_driver()
+        logger.info(f"[{self.PLATFORM_NAME}] Browser restarted")
+
     def start(self):
         """Start the browser."""
         if not self.driver:

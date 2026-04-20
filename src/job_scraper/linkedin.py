@@ -14,6 +14,8 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
     ElementClickInterceptedException,
+    InvalidSessionIdException,
+    WebDriverException,
 )
 
 from .base import BaseScraper

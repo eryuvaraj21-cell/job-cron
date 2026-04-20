@@ -14,6 +14,8 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
     ElementClickInterceptedException,
+    InvalidSessionIdException,
+    WebDriverException,
 )
 
 from .base import BaseScraper
@@ -505,6 +507,10 @@ class NaukriScraper(BaseScraper):
     def apply_to_job(self, job: dict, resume_path: str) -> dict:
         """Apply to a job on Naukri."""
         try:
+            self._ensure_session()
+        except Exception as e:
+            return {"status": "failed", "message": f"Could not recover browser session: {e}"}
+        try:
             self._safe_get(job["url"], wait_seconds=4)
             time.sleep(3)
 
@@ -653,6 +659,16 @@ class NaukriScraper(BaseScraper):
 
             return {"status": "applied", "message": "Apply button clicked - checking status"}
 
+        except (InvalidSessionIdException, WebDriverException) as e:
+            msg = str(e)
+            if "invalid session id" in msg or "session deleted" in msg or "no such session" in msg:
+                logger.warning(f"[Naukri] Browser session died mid-apply, restarting: {job.get('title', '')}")
+                try:
+                    self._restart_driver()
+                except Exception:
+                    pass
+            logger.warning(f"[Naukri] FAILED: {job.get('title', 'unknown')} - {msg.splitlines()[0]}")
+            return {"status": "failed", "message": msg}
         except Exception as e:
             logger.error(f"[Naukri] Apply error for {job.get('title', 'unknown')}: {e}")
             return {"status": "failed", "message": str(e)}
