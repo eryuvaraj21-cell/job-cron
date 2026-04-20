@@ -14,7 +14,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 logger = logging.getLogger(__name__)
@@ -77,9 +76,25 @@ class BaseScraper(ABC):
 
         if self.chrome_binary:
             options.binary_location = self.chrome_binary
+        elif os.environ.get("CHROME_BIN"):
+            options.binary_location = os.environ["CHROME_BIN"]
 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+        # Use Selenium Manager (built into Selenium 4.6+) to auto-resolve a
+        # chromedriver matching the installed Chrome. webdriver-manager often
+        # ships a mismatched driver which causes "Chrome instance exited".
+        log_path = os.path.join(tempfile.gettempdir(), f"chromedriver-{os.getpid()}.log")
+        service = Service(log_output=log_path, service_args=["--verbose"])
+        try:
+            driver = webdriver.Chrome(service=service, options=options)
+        except Exception:
+            # Surface the verbose chromedriver log to help debug CI failures.
+            try:
+                with open(log_path, "r", errors="replace") as f:
+                    tail = f.read()[-4000:]
+                logger.error(f"[{self.PLATFORM_NAME}] chromedriver log tail:\n{tail}")
+            except Exception:
+                pass
+            raise
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
