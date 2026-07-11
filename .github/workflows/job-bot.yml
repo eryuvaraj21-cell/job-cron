@@ -28,6 +28,6 @@ jobs:
 
       - name: Run one cycle
         env:
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL: "http://rilltyrj:7sdwn0997hwi@p.webshare.io:80"
         run: python -m src.run_once
         timeout-minutes: 20
