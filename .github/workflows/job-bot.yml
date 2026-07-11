@@ -7,15 +7,27 @@ on:
 
 jobs:
   apply:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Run one cycle
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
         run: python -m src.run_once
         timeout-minutes: 20

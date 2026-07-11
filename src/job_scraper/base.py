@@ -74,6 +74,13 @@ class BaseScraper(ABC):
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
 
+        # Proxy support — set PROXY_URL=http://user:pass@host:port to route
+        # traffic through a residential proxy (useful in CI where site IPs are blocked).
+        proxy_url = os.environ.get("PROXY_URL", "").strip()
+        if proxy_url:
+            options.add_argument(f"--proxy-server={proxy_url}")
+            logger.info(f"[{self.PLATFORM_NAME}] Using proxy: {proxy_url.split('@')[-1]}")  # hide creds in log
+
         if self.chrome_binary:
             options.binary_location = self.chrome_binary
         elif os.environ.get("CHROME_BIN"):
