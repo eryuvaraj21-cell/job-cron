@@ -33,7 +33,6 @@ from src.email_notifier import EmailNotifier
 from src import database as db
 
 # ─── HARDCODED CONFIG (edit these values directly) ─────────────────
-# WARNING: credentials are stored in plain text. Do not commit this file.
 HARDCODED = {
     # Profile
     "YOUR_NAME": "Yuvaraj Durairaj",
@@ -46,7 +45,7 @@ HARDCODED = {
 
     # Naukri
     "NAUKRI_EMAIL": "eryuvaraj21@gmail.com",
-    "NAUKRI_PASSWORD": "jw8jZKhL%y.RJb$",
+    "NAUKRI_PASSWORD": "Yuvinaukripwd123@@",
 
     # Email notifications (optional - leave blank to disable)
     "SMTP_HOST": "smtp.gmail.com",
@@ -98,19 +97,31 @@ logging.basicConfig(
 logger = logging.getLogger("job-bot")
 
 
-# ─── Initialize components ─────────────────────────────────────────
+# ─── Shared singletons (created once at startup) ───────────────────
+
+_notifier: "EmailNotifier | None" = None
+_profile = None
+_matcher: "JobMatcher | None" = None
+
 
 def get_notifier() -> EmailNotifier:
-    return EmailNotifier(
-        smtp_host=HARDCODED["SMTP_HOST"],
-        smtp_port=int(HARDCODED["SMTP_PORT"]),
-        smtp_email=HARDCODED["SMTP_EMAIL"],
-        smtp_password=HARDCODED["SMTP_PASSWORD"],
-        notify_email=HARDCODED["NOTIFY_EMAIL"],
-    )
+    global _notifier
+    if _notifier is None:
+        _notifier = EmailNotifier(
+            smtp_host=HARDCODED["SMTP_HOST"],
+            smtp_port=int(HARDCODED["SMTP_PORT"]),
+            smtp_email=HARDCODED["SMTP_EMAIL"],
+            smtp_password=HARDCODED["SMTP_PASSWORD"],
+            notify_email=HARDCODED["NOTIFY_EMAIL"],
+        )
+    return _notifier
 
 
 def get_resume_profile():
+    global _profile
+    if _profile is not None:
+        return _profile
+
     resume_path = HARDCODED["RESUME_PATH"]
     full_path = PROJECT_ROOT / resume_path
 
@@ -120,13 +131,22 @@ def get_resume_profile():
         return None
 
     parser = ResumeParser(str(full_path))
-    profile = parser.parse()
+    _profile = parser.parse()
 
-    logger.info(f"Resume parsed: {profile.name}")
-    logger.info(f"Skills found: {', '.join(profile.skills[:15])}...")
-    logger.info(f"Experience: {profile.experience_years} years")
+    logger.info(f"Resume parsed: {_profile.name}")
+    logger.info(f"Skills found: {', '.join(_profile.skills[:15])}...")
+    logger.info(f"Experience: {_profile.experience_years} years")
 
-    return profile
+    return _profile
+
+
+def get_matcher() -> JobMatcher:
+    global _matcher
+    if _matcher is None:
+        profile = get_resume_profile()
+        if profile:
+            _matcher = JobMatcher(profile, CONFIG)
+    return _matcher
 
 
 # ─── Core job processing pipeline ──────────────────────────────────
@@ -193,6 +213,12 @@ def process_platform(scraper, platform_config, email, password, profile, matcher
             unique_jobs.append(j)
         logger.info(f"[{platform_name}] Total jobs found: {len(all_jobs)} (unique: {len(unique_jobs)})")
 
+        # Batch-filter URLs already in the database (one query instead of N)
+        all_urls = [j["url"] for j in unique_jobs]
+        new_urls = db.filter_new_urls(all_urls)
+        unique_jobs = [j for j in unique_jobs if j["url"] in new_urls]
+        logger.info(f"[{platform_name}] New jobs (not yet in DB): {len(unique_jobs)}")
+
         # Process each job
         for job in unique_jobs:
             if applied_count >= max_applications:
@@ -200,10 +226,6 @@ def process_platform(scraper, platform_config, email, password, profile, matcher
                 break
 
             job_url = job.get("url", "")
-
-            # Skip if already in database
-            if db.job_exists(job_url):
-                continue
 
             logger.info(f"[{platform_name}] Evaluating: {job.get('title','')} @ {job.get('company','')} -> {job_url}")
 
@@ -268,12 +290,12 @@ def run_job_cycle():
     logger.info(f"Starting job cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
 
-    # Parse resume
+    # Use cached singletons
     profile = get_resume_profile()
     if not profile:
         return
 
-    matcher = JobMatcher(profile, CONFIG)
+    matcher = get_matcher()
     notifier = get_notifier()
     resume_path = HARDCODED["RESUME_PATH"]
     headless = bool(HARDCODED["BROWSER_HEADLESS"])
@@ -291,20 +313,6 @@ def run_job_cycle():
     all_manual_needed = []
 
     platform_configs = CONFIG.get("platforms", {})
-
-    # ── LinkedIn ──
-    if platform_configs.get("linkedin", {}).get("enabled", False):
-        scraper = LinkedInScraper(headless=headless, chrome_binary=chrome_binary)
-        scraper.otp_config = otp_config
-        applied, manual = process_platform(
-            scraper,
-            platform_configs["linkedin"],
-            HARDCODED["LINKEDIN_EMAIL"],
-            HARDCODED["LINKEDIN_PASSWORD"],
-            profile, matcher, resume_path, notifier,
-        )
-        all_applied.extend(applied)
-        all_manual_needed.extend(manual)
 
     # ── Naukri ──
     if platform_configs.get("naukri", {}).get("enabled", False):
@@ -349,17 +357,20 @@ def main():
     """Start the bot with APScheduler."""
     logger.info("Job Auto-Apply Bot starting...")
 
-    # Initialize database
+    # Initialize database and singletons eagerly
     db.init_db()
     logger.info("Database initialized")
 
-    # Validate resume exists
+    # Validate and cache resume at startup (fail fast)
     resume_path = HARDCODED["RESUME_PATH"]
     full_resume_path = PROJECT_ROOT / resume_path
     if not full_resume_path.exists():
         logger.error(f"Resume not found: {full_resume_path}")
         logger.error("Please place your resume (PDF/DOCX) in the 'resume/' folder")
         logger.error("Then update RESUME_PATH in src/main.py HARDCODED")
+        sys.exit(1)
+
+    if get_resume_profile() is None:
         sys.exit(1)
 
     interval = int(HARDCODED["CRON_INTERVAL_MINUTES"])

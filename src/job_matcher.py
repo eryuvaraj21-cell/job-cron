@@ -29,6 +29,18 @@ class JobMatcher:
         self.all_skills = set(s.lower() for s in self.profile.skills)
         self.all_skills.update(s.lower() for s in extra)
 
+        # Pre-compile skill regex patterns (avoids recompiling on every score call)
+        self._skill_patterns = {
+            skill: re.compile(r"\b" + re.escape(skill) + r"\b", re.IGNORECASE)
+            for skill in self.all_skills
+        }
+
+        # Cache desired job titles (immutable across scoring calls)
+        search_titles = config.get("search", {}).get("titles", [])
+        self._all_desired_titles = [
+            t.lower() for t in search_titles + list(self.profile.job_titles)
+        ]
+
     def score_job(self, job: dict) -> float:
         """
         Score a job listing from 0-100.
@@ -67,20 +79,19 @@ class JobMatcher:
         if isinstance(job_skills, str):
             job_skills = [s.strip() for s in job_skills.split(",") if s.strip()]
 
-        # Extract skills from job text
-        job_skill_set = set(s.lower() for s in job_skills)
-        for skill in self.all_skills:
-            pattern = r"\b" + re.escape(skill) + r"\b"
-            if re.search(pattern, job_text):
+        # Start from explicit skills listed on the job
+        job_skill_set = {s.lower() for s in job_skills}
+
+        # Augment with skills found in text using pre-compiled patterns
+        for skill, pattern in self._skill_patterns.items():
+            if pattern.search(job_text):
                 job_skill_set.add(skill)
 
         if not job_skill_set:
             return 50.0  # No skills listed, give neutral score
 
-        # Count matches
         matched = self.all_skills.intersection(job_skill_set)
         match_ratio = len(matched) / max(len(job_skill_set), 1)
-
         return min(match_ratio * 100, 100)
 
     def _title_match_score(self, job: dict) -> float:
@@ -90,19 +101,13 @@ class JobMatcher:
         if not job_title:
             return 0.0
 
-        search_titles = self.config.get("search", {}).get("titles", [])
-        resume_titles = self.profile.job_titles
-
-        all_desired = [t.lower() for t in search_titles + resume_titles]
-
-        if not all_desired:
+        if not self._all_desired_titles:
             return 50.0
 
-        best_score = 0
-        for desired in all_desired:
-            score = fuzz.token_sort_ratio(job_title, desired)
-            best_score = max(best_score, score)
-
+        best_score = max(
+            fuzz.token_sort_ratio(job_title, desired)
+            for desired in self._all_desired_titles
+        )
         return best_score
 
     def _experience_match_score(self, job: dict) -> float:

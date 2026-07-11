@@ -35,7 +35,7 @@ matching:
 # Platforms to scrape
 platforms:
   linkedin:
-    enabled: true
+    enabled: false
     easy_apply_only: true
     max_applications_per_run: 10
   naukri:

@@ -106,7 +106,17 @@ class NaukriScraper(BaseScraper):
 
             page_text = self.driver.page_source.lower()
             if "captcha" in page_text:
-                logger.warning("[Naukri] Captcha detected - manual intervention needed")
+                if not self.headless:
+                    logger.warning("[Naukri] Captcha detected - waiting up to 60s for manual solve...")
+                    for _ in range(12):  # check every 5s for up to 60s
+                        time.sleep(5)
+                        try:
+                            if "nlogin" not in self.driver.current_url:
+                                logger.info("[Naukri] Captcha solved - login successful")
+                                return True
+                        except Exception:
+                            break
+                logger.warning("[Naukri] Captcha not solved - manual intervention needed")
                 if not self.headless:
                     self._keep_open_on_failure = True
                 return False
