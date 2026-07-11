@@ -7,47 +7,14 @@ on:
 
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Create .env
-        run: |
-          cat > .env << 'ENVEOF'
-          LINKEDIN_EMAIL=eryuvaraj21@gmail.com
-          LINKEDIN_PASSWORD=PSEue1-8xypL1qU
-          NAUKRI_EMAIL=eryuvaraj21@gmail.com
-          NAUKRI_PASSWORD=Yuvinaukripwd123@@
-          SMTP_HOST=smtp.gmail.com
-          SMTP_PORT=587
-          SMTP_EMAIL=yuva21052000@gmail.com
-          SMTP_PASSWORD=fsnu zrrt ycli zjpi
-          NOTIFY_EMAIL=eryuvaraj21@gmail.com
-          OTP_EMAIL=eryuvaraj21@gmail.com
-          OTP_PASSWORD=yvjh crqz hufk qput
-          IMAP_HOST=imap.gmail.com
-          IMAP_PORT=993
-          OTP_TIMEOUT_SECONDS=120
-          RESUME_PATH=resume/resume.pdf
-          BROWSER_HEADLESS=true
-          CRON_INTERVAL_MINUTES=9999
-          ENVEOF
-          sed -i 's/^[[:space:]]*//' .env
 
       - name: Run one cycle
         run: python -m src.run_once
