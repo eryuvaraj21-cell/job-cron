@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchJobs, Job } from '../api';
+import { getJobs, LocalJob } from '../services/database';
 import { C, statusColor, statusBg, fmtDate } from '../theme';
 
 const FILTERS = ['all', 'applied', 'manual_needed', 'failed', 'skipped'] as const;
@@ -13,7 +13,7 @@ type Filter = typeof FILTERS[number];
 
 // ── Job card ───────────────────────────────────────────────────────────────────
 
-function JobCard({ job }: { job: Job }) {
+function JobCard({ job }: { job: LocalJob }) {
   const openUrl = () => {
     if (job.url) Linking.openURL(job.url).catch(() => {});
   };
@@ -57,14 +57,14 @@ function JobCard({ job }: { job: Job }) {
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
 export default function JobsScreen() {
-  const [jobs, setJobs]         = useState<Job[]>([]);
+  const [jobs, setJobs]         = useState<LocalJob[]>([]);
   const [filter, setFilter]     = useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchJobs(150);
+      const data = await getJobs(150);
       setJobs(data);
     } catch { /* keep showing stale data */ }
     finally   { setLoading(false); }

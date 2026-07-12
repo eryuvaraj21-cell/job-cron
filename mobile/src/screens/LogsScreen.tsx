@@ -5,8 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchLogs, LogEntry } from '../api';
+import { getLogs, clearLogs as dbClearLogs } from '../services/database';
 import { C, logColor } from '../theme';
+
+interface LogEntry { message: string; level: string; timestamp: string; }
 
 export default function LogsScreen() {
   const [logs, setLogs]       = useState<LogEntry[]>([]);
@@ -17,11 +19,11 @@ export default function LogsScreen() {
 
   const load = useCallback(async (replace = false) => {
     try {
-      const data = await fetchLogs(200);
+      const data = await getLogs(200);
       if (replace) {
-        setLogs(data);
+        setLogs(data.reverse());
       } else if (data.length !== countRef.current) {
-        setLogs(data);
+        setLogs(data.reverse());
         countRef.current = data.length;
         scrollRef.current?.scrollToEnd({ animated: true });
       }
@@ -39,7 +41,7 @@ export default function LogsScreen() {
     return () => clearInterval(id);
   }, [live, load]);
 
-  const handleClear = () => setLogs([]);
+  const handleClear = async () => { await dbClearLogs(); setLogs([]); };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -76,9 +78,11 @@ export default function LogsScreen() {
           onContentSizeChange={() => live && scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {logs.map((entry, i) => {
-            const color = logColor(entry.msg);
-            const isError   = entry.msg.includes('ERROR');
-            const isWarning = entry.msg.includes('WARNING');
+            const msg       = entry.message || '';
+            const ts        = entry.timestamp?.slice(11, 19) ?? '';
+            const color     = logColor(msg);
+            const isError   = msg.includes('ERROR');
+            const isWarning = msg.includes('WARNING');
             return (
               <View
                 key={i}
@@ -88,11 +92,9 @@ export default function LogsScreen() {
                   isWarning && styles.logLineWarn,
                 ]}
               >
-                <Text style={[styles.logTime, { color: C.textMuted }]}>
-                  {entry.ts?.slice(11, 19) ?? ''}
-                </Text>
+                <Text style={[styles.logTime, { color: C.textMuted }]}>{ts}</Text>
                 <Text style={[styles.logMsg, { color }]} selectable>
-                  {entry.msg?.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ \| \w+\s*\| [^|]+ \| /, '')}
+                  {msg}
                 </Text>
               </View>
             );

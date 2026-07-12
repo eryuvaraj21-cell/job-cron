@@ -20,6 +20,11 @@
       "permissions": ["INTERNET"]
     },
     "scheme": "jobbot",
-    "plugins": []
+    "plugins": [
+      ["expo-notifications", {
+        "color": "#6366f1",
+        "defaultChannel": "jobbot"
+      }]
+    ]
   }
 }

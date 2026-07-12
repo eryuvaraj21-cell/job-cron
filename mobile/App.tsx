@@ -10,8 +10,12 @@ import JobsScreen      from './src/screens/JobsScreen';
 import LogsScreen      from './src/screens/LogsScreen';
 import SettingsScreen  from './src/screens/SettingsScreen';
 import { C }           from './src/theme';
+import { defineTask }  from './src/services/scheduler';
 
 const Tab = createBottomTabNavigator();
+
+// Register the background task definition at module level (required by expo-task-manager)
+defineTask();
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
