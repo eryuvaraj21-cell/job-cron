@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { C } from '../theme';
-import { storeToken } from '../services/naukri';
 
 const LOGIN_URL = 'https://www.naukri.com/nlogin/login';
 
@@ -70,26 +69,6 @@ true;
 `;
 }
 
-// ── Script injected after login URL change to extract the auth token ──────────
-const EXTRACT_TOKEN_SCRIPT = `
-(function() {
-  var result = { token: null, cookies: document.cookie, ls: {} };
-  try {
-    // Walk all localStorage keys looking for JWT or authToken
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      var v = localStorage.getItem(k);
-      result.ls[k] = v;
-      if (!result.token && v && (v.startsWith('eyJ') || k.toLowerCase().indexOf('token') >= 0 || k.toLowerCase().indexOf('auth') >= 0)) {
-        result.token = v;
-      }
-    }
-  } catch(e) { result.lsError = e.message; }
-  window.ReactNativeWebView.postMessage(JSON.stringify(result));
-})();
-true;
-`;
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -116,39 +95,17 @@ export default function NaukriLoginWebView({ email, password, onSuccess, onError
 
   const handleNavigationChange = useCallback((nav: WebViewNavigation) => {
     const url = nav.url ?? '';
-    if (!loginDone.current && !url.includes('/nlogin/')) {
+    if (!loginDone.current && !url.includes('/nlogin/') && !url.includes('naukri.com/login')) {
       loginDone.current = true;
-      setStatus('Logged in — extracting session token…');
-      wvRef.current?.injectJavaScript(EXTRACT_TOKEN_SCRIPT);
+      setStatus('Login successful ✓');
+      // Give the page a moment to settle then report success
+      setTimeout(() => onSuccess('webview-session'), 800);
     }
+  }, [onSuccess]);
+
+  const handleMessage = useCallback(async (_e: any) => {
+    // No longer used — login success detected via navigation change
   }, []);
-
-  const handleMessage = useCallback(async (e: any) => {
-    try {
-      const data = JSON.parse(e.nativeEvent.data);
-
-      // Look for a JWT-like token in the extracted data
-      let token: string | null = data.token ?? null;
-
-      if (!token && data.cookies) {
-        // Try cookies: look for any value starting with eyJ
-        const parts = data.cookies.split(';');
-        for (const p of parts) {
-          const v = p.split('=').slice(1).join('=').trim();
-          if (v.startsWith('eyJ')) { token = v; break; }
-        }
-      }
-
-      if (token) {
-        await storeToken(token);
-        onSuccess(token);
-      } else {
-        // Show what we received for debugging
-        const preview = JSON.stringify(data).slice(0, 200);
-        onError(`Logged in but no token found. Received: ${preview}`);
-      }
-    } catch { /* not our message */ }
-  }, [onSuccess, onError]);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
