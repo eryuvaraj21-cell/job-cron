@@ -29,13 +29,77 @@ class NaukriScraper(BaseScraper):
     LOGIN_URL = "https://www.naukri.com/nlogin/login"
 
     def login(self, email: str, password: str) -> bool:
-        """Login to Naukri through the Google SSO flow."""
+        """Try native Naukri login first, then fall back to Google SSO."""
         if not email or not password:
-            logger.error("[Naukri] Missing Google SSO credentials")
+            logger.error("[Naukri] Missing login credentials")
             return False
         try:
             self.start()
             self._safe_get(self.LOGIN_URL, wait_seconds=4)
+
+            if self._login_with_native_credentials(email, password):
+                return True
+
+            logger.warning("[Naukri] Native login failed; trying Google SSO")
+            self._safe_get(self.LOGIN_URL, wait_seconds=4)
+            return self._login_with_google_sso(email, password)
+        except Exception as e:
+            logger.error(f"[Naukri] Login error: {e}")
+            return False
+
+    def _login_with_native_credentials(self, email: str, password: str) -> bool:
+        email_field = None
+        for locator in [
+            (By.ID, "usernameField"),
+            (By.NAME, "email"),
+            (By.CSS_SELECTOR, "input[placeholder*='Email' i]"),
+            (By.CSS_SELECTOR, "input[placeholder*='Username' i]"),
+            (By.CSS_SELECTOR, "form input[type='text']"),
+        ]:
+            try:
+                email_field = self._wait_for_element(*locator, timeout=4)
+                if email_field and email_field.is_displayed():
+                    break
+            except TimeoutException:
+                continue
+        if not email_field:
+            return False
+
+        password_field = None
+        for locator in [
+            (By.ID, "passwordField"),
+            (By.NAME, "password"),
+            (By.CSS_SELECTOR, "input[type='password']"),
+        ]:
+            try:
+                password_field = self._wait_for_element(*locator, timeout=4)
+                if password_field and password_field.is_displayed():
+                    break
+            except TimeoutException:
+                continue
+        if not password_field:
+            return False
+
+        self._type_into(email_field, email)
+        self._type_into(password_field, password)
+        try:
+            login_btn = self.driver.find_element(
+                By.XPATH,
+                "//button[@type='submit' or contains(translate(., 'LOGIN', 'login'), 'login')]",
+            )
+            login_btn.click()
+        except NoSuchElementException:
+            password_field.send_keys(Keys.RETURN)
+
+        time.sleep(6)
+        if self._handle_otp_if_present():
+            time.sleep(5)
+        if "nlogin" not in self.driver.current_url:
+            logger.info("[Naukri] Native login successful")
+            return True
+        return False
+
+    def _login_with_google_sso(self, email: str, password: str) -> bool:
 
             sso_button = None
             for locator in [
@@ -164,10 +228,6 @@ class NaukriScraper(BaseScraper):
             logger.warning("[Naukri] Google SSO login may have failed")
             if not self.headless:
                 self._keep_open_on_failure = True
-            return False
-
-        except Exception as e:
-            logger.error(f"[Naukri] Login error: {e}")
             return False
 
     def _handle_otp_if_present(self) -> bool:
