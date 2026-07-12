@@ -120,11 +120,13 @@ export default function SettingsScreen() {
                 if (!naukriEmail || !naukriPassword) { Alert.alert('Missing', 'Enter email and password first.'); return; }
                 setLoginStatus('testing');
                 await clearToken();
-                const token = await loginNaukri(naukriEmail, naukriPassword);
-                setLoginStatus(token ? 'ok' : 'fail');
+                const result = await loginNaukri(naukriEmail, naukriPassword);
+                setLoginStatus(result.token ? 'ok' : 'fail');
                 Alert.alert(
-                  token ? '✅ Login OK' : '❌ Login Failed',
-                  token ? 'Naukri login successful. Recommended jobs will be fetched on next run.' : 'Check your email/password.',
+                  result.token ? '✅ Login OK' : '❌ Login Failed',
+                  result.token
+                    ? 'Naukri login successful. Recommended jobs will be fetched on next run.'
+                    : `Error: ${result.error ?? 'Unknown error'}`,
                 );
               }}>
               {loginStatus === 'testing'

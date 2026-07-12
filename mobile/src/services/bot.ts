@@ -65,11 +65,12 @@ export async function runBotCycle(): Promise<{ newJobs: number; matched: number 
         authToken = stored;
         await log('Using cached Naukri session');
       } else {
-        authToken = await loginNaukri(settings.naukriEmail, settings.naukriPassword);
-        if (authToken) {
+        const loginResult = await loginNaukri(settings.naukriEmail, settings.naukriPassword);
+        if (loginResult.token) {
+          authToken = loginResult.token;
           await log('Naukri login successful');
         } else {
-          await log('Naukri login failed — falling back to public search', 'error');
+          await log(`Naukri login failed: ${loginResult.error}`, 'error');
           await clearToken();
         }
       }

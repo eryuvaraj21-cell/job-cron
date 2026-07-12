@@ -37,35 +37,79 @@ export async function clearToken(): Promise<void> {
 // ── Login ─────────────────────────────────────────────────────────────────────
 
 /**
- * Authenticate with Naukri's central login service.
- * Returns the authToken on success, null on failure.
- * Mirrors the Python bot's _login_with_native_credentials().
+ * Authenticate with Naukri.
+ * Uses the same API endpoint that https://www.naukri.com/nlogin/login calls.
+ * Returns { token } on success or { error } on failure — never silent.
  */
-export async function loginNaukri(email: string, password: string): Promise<string | null> {
-  if (!email || !password) return null;
-  try {
-    const resp = await axios.post(
-      `${BASE}/central-login-services/v2/login`,
-      { username: email, password },
-      {
-        headers: {
-          ...HEADERS,
-          'Content-Type': 'application/json',
-          'Origin': BASE,
-        },
-        timeout: 15_000,
-      },
-    );
-    const token =
-      resp.data?.loginResult?.clientData?.authToken ??
-      resp.data?.jdToken ??
-      resp.headers?.['x-auth-token'] ??
-      null;
-    if (token) await storeToken(token);
-    return token;
-  } catch {
-    return null;
+export async function loginNaukri(
+  email: string,
+  password: string,
+): Promise<{ token: string; error: null } | { token: null; error: string }> {
+  if (!email || !password)
+    return { token: null, error: 'Email and password are required' };
+
+  // Headers that replicate what the browser sends from nlogin/login
+  const loginHeaders = {
+    'appid':          '109',
+    'systemid':       'Naukri',
+    'clientid':       'd3skt0p',
+    'Content-Type':   'application/json',
+    'Accept':         'application/json, text/plain, */*',
+    'Referer':        `${BASE}/nlogin/login`,
+    'Origin':         BASE,
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
+
+  // Try primary endpoint (used by the nlogin/login page)
+  const endpoints = [
+    { url: `${BASE}/central-login-services/v2/login`,        body: { username: email, password } },
+    { url: `${BASE}/central-login-services/v1/login`,        body: { username: email, password } },
+  ];
+
+  for (const { url, body } of endpoints) {
+    try {
+      const resp = await axios.post(url, body, {
+        headers: loginHeaders,
+        timeout: 20_000,
+        validateStatus: () => true, // don't throw on 4xx — handle manually
+      });
+
+      // Extract token from wherever Naukri puts it
+      const d = resp.data ?? {};
+      const token =
+        d?.loginResult?.clientData?.authToken ??
+        d?.loginResult?.authToken ??
+        d?.authToken ??
+        d?.jdToken ??
+        resp.headers?.['x-auth-token'] ??
+        resp.headers?.['authtoken'] ??
+        null;
+
+      if (token) {
+        await storeToken(token);
+        return { token, error: null };
+      }
+
+      // Login succeeded HTTP-wise but no token — surface the message
+      if (resp.status === 200 && !token) {
+        const msg = d?.message ?? d?.error ?? 'Login response contained no token';
+        return { token: null, error: `HTTP 200 but no token: ${msg}` };
+      }
+
+      if (resp.status === 401 || resp.status === 403) {
+        const msg = d?.message ?? d?.error ?? 'Invalid credentials';
+        return { token: null, error: `HTTP ${resp.status}: ${msg}` };
+      }
+
+    } catch (err: any) {
+      // Only continue to the next endpoint on network-level errors
+      if (!err?.response) continue;
+      return { token: null, error: err.message ?? String(err) };
+    }
   }
+
+  return { token: null, error: 'All login endpoints failed — check your internet connection' };
 }
 
 // ── Job shape ─────────────────────────────────────────────────────────────────
