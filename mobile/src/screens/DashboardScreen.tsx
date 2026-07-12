@@ -9,6 +9,7 @@ import { runBotCycle, getRunStatus, RunStatus } from '../services/bot';
 import { getStats, LocalStats } from '../services/database';
 import { isScheduled, registerBackgroundFetch, unregisterBackgroundFetch } from '../services/scheduler';
 import { C, fmtTime } from '../theme';
+import NaukriBotSession, { BotResult } from '../components/NaukriBotSession';
 
 function StatCard({ label, value, color, icon }: { label: string; value: string | number; color: string; icon: any }) {
   return (
@@ -29,6 +30,7 @@ export default function DashboardScreen() {
   const [scheduled, setScheduled] = useState(false);
   const [running, setRunning]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showBot,  setShowBot]    = useState(false);
 
   const load = useCallback(async () => {
     const [s, st, sch] = await Promise.all([getRunStatus(), getStats(), isScheduled()]);
@@ -41,18 +43,11 @@ export default function DashboardScreen() {
 
   const handleRun = useCallback(async () => {
     if (status?.running) { Alert.alert('Already running', 'A cycle is already in progress.'); return; }
-    Alert.alert('Run Now', 'Start a job search cycle?', [
+    Alert.alert('Launch Bot', 'Start a full Naukri scrape + apply cycle?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Run', onPress: async () => {
-        setRunning(true);
-        try {
-          const { newJobs, matched } = await runBotCycle();
-          Alert.alert('✅ Done', newJobs > 0 ? `Found ${newJobs} new, ${matched} matched.` : 'No new jobs.');
-        } catch { Alert.alert('Error', 'Cycle failed. Check Logs tab.'); }
-        finally { setRunning(false); load(); }
-      }},
+      { text: 'Launch', onPress: () => setShowBot(true) },
     ]);
-  }, [status, load]);
+  }, [status]);
 
   const toggleSchedule = useCallback(async (val: boolean) => {
     val ? await registerBackgroundFetch() : await unregisterBackgroundFetch();
@@ -81,6 +76,19 @@ export default function DashboardScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accentMid} />}>
+
+        {showBot && (
+          <NaukriBotSession
+            onClose={(result: BotResult) => {
+              setShowBot(false);
+              load();
+              Alert.alert(
+                '✅ Cycle complete',
+                `Applied: ${result.applied}  |  Skipped: ${result.skipped}  |  Total found: ${result.total}`,
+              );
+            }}
+          />
+        )}
 
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>
