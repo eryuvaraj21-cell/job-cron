@@ -7,7 +7,7 @@
  *   4. Save to local SQLite
  * No Python server or PC required.
  */
-import { searchNaukri, getRecommendedJobs, loginNaukri, getStoredToken, clearToken } from './naukri';
+import { searchNaukri, getRecommendedJobs, getStoredToken, clearToken } from './naukri';
 import { isNewJob, saveJob, getStats, addLog } from './database';
 import { scoreJob } from './matcher';
 import { loadSettings } from './settings';
@@ -56,24 +56,16 @@ export async function runBotCycle(): Promise<{ newJobs: number; matched: number 
     const seen    = new Set<string>();
     let authToken: string | null = null;
 
-    // ── Step 1: Login (mirrors Python bot's login flow) ─────────────────────
-    if (settings.naukriEmail && settings.naukriPassword) {
-      await log('Attempting Naukri login…');
-      // Try stored token first to avoid re-logging every cycle
+    // ── Step 1: Load cached session (set via WebView login in Settings) ───────
+    if (settings.naukriEmail) {
       const stored = await getStoredToken();
       if (stored) {
         authToken = stored;
-        await log('Using cached Naukri session');
+        await log('Using cached Naukri session (from WebView login)');
       } else {
-        const loginResult = await loginNaukri(settings.naukriEmail, settings.naukriPassword);
-        if (loginResult.token) {
-          authToken = loginResult.token;
-          await log('Naukri login successful');
-        } else {
-          await log(`Naukri login failed: ${loginResult.error}`, 'error');
-          await clearToken();
-        }
+        await log('No cached Naukri session — go to Settings → Naukri Account → Login via browser', 'error');
       }
+    }
     }
 
     // ── Step 2: Fetch jobs ───────────────────────────────────────────────────

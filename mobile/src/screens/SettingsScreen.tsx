@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { loadSettings, saveSettings, BotSettings } from '../services/settings';
 import { requestPermissions } from '../services/notifications';
-import { loginNaukri, clearToken } from '../services/naukri';
+import { clearToken } from '../services/naukri';
+import NaukriLoginWebView from '../components/NaukriLoginWebView';
 import { C } from '../theme';
 
 function Field({ label, value, onChangeText, placeholder, multiline = false, keyboardType = 'default' }: {
@@ -39,6 +40,7 @@ export default function SettingsScreen() {
   const [naukriEmail,    setNaukriEmail]    = useState('');
   const [naukriPassword, setNaukriPassword] = useState('');
   const [loginStatus, setLoginStatus]       = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [showWebLogin, setShowWebLogin]     = useState(false);
 
   useEffect(() => {
     loadSettings().then(s => {
@@ -118,16 +120,9 @@ export default function SettingsScreen() {
               disabled={loginStatus === 'testing'}
               onPress={async () => {
                 if (!naukriEmail || !naukriPassword) { Alert.alert('Missing', 'Enter email and password first.'); return; }
-                setLoginStatus('testing');
                 await clearToken();
-                const result = await loginNaukri(naukriEmail, naukriPassword);
-                setLoginStatus(result.token ? 'ok' : 'fail');
-                Alert.alert(
-                  result.token ? '✅ Login OK' : '❌ Login Failed',
-                  result.token
-                    ? 'Naukri login successful. Recommended jobs will be fetched on next run.'
-                    : `Error: ${result.error ?? 'Unknown error'}`,
-                );
+                setLoginStatus('testing');
+                setShowWebLogin(true);
               }}>
               {loginStatus === 'testing'
                 ? <ActivityIndicator size="small" color={C.accentLight} />
@@ -136,9 +131,30 @@ export default function SettingsScreen() {
               <Text style={[styles.notifBtnText, {
                 color: loginStatus === 'ok' ? C.green : loginStatus === 'fail' ? C.red : C.accentLight
               }]}>
-                {loginStatus === 'testing' ? 'Testing…' : loginStatus === 'ok' ? 'Connected' : loginStatus === 'fail' ? 'Login failed' : 'Test Naukri login'}
+                {loginStatus === 'testing' ? 'Opening browser login…' : loginStatus === 'ok' ? 'Connected' : loginStatus === 'fail' ? 'Login failed' : 'Login via Naukri browser'}
               </Text>
             </TouchableOpacity>
+
+            {showWebLogin && (
+              <NaukriLoginWebView
+                email={naukriEmail}
+                password={naukriPassword}
+                onSuccess={(token) => {
+                  setShowWebLogin(false);
+                  setLoginStatus('ok');
+                  Alert.alert('✅ Login OK', 'Naukri session saved. Recommended jobs will be fetched on next run.');
+                }}
+                onError={(msg) => {
+                  setShowWebLogin(false);
+                  setLoginStatus('fail');
+                  Alert.alert('❌ Login Failed', msg);
+                }}
+                onClose={() => {
+                  setShowWebLogin(false);
+                  setLoginStatus('idle');
+                }}
+              />
+            )}
           </View>
 
           <View style={styles.card}>
