@@ -1,6 +1,6 @@
 # 🤖 Job Auto-Apply Bot
 
-Automated job application bot that parses your resume, scrapes jobs from **LinkedIn**, **Naukri**, and **Indeed**, matches them to your skills, and auto-applies every 30 minutes. Sends you email alerts when manual action is needed.
+Automated job application bot that parses your resume, scrapes jobs from **Naukri**, matches them to your skills, and auto-applies every 30 minutes. Sends you email alerts when manual action is needed.
 
 ---
 
@@ -11,7 +11,7 @@ Automated job application bot that parses your resume, scrapes jobs from **Linke
 │                  Every 30 Minutes                       │
 ├─────────────────────────────────────────────────────────┤
 │  1. Parse Resume  →  Extract skills, experience         │
-│  2. Scrape Jobs   →  LinkedIn, Naukri, Indeed           │
+│  2. Scrape Jobs   →  Naukri                             │
 │  3. Match & Score →  Compare job requirements vs skills │
 │  4. Auto-Apply    →  Submit applications automatically  │
 │  5. Notify        →  Email you when manual action needed│
@@ -21,7 +21,7 @@ Automated job application bot that parses your resume, scrapes jobs from **Linke
 ## Features
 
 - **Resume Parsing** - Extracts skills, experience, education from PDF/DOCX
-- **Multi-Platform** - LinkedIn (Easy Apply), Naukri, Indeed
+- **Job Platform** - Naukri recommended jobs and auto-apply
 - **Smart Matching** - Scores jobs based on skill overlap, title relevance, and experience fit
 - **Auto-Apply** - Submits applications via browser automation
 - **Email Alerts** - Notifies you when a job needs manual login, extra info, or portal access
@@ -62,13 +62,7 @@ Edit `.env` with your actual credentials:
 YOUR_NAME=John Doe
 YOUR_EMAIL=john@example.com
 
-# LinkedIn credentials
-LINKEDIN_EMAIL=john@example.com
-LINKEDIN_PASSWORD=your-password
-
-# Naukri credentials
-NAUKRI_EMAIL=john@example.com
-NAUKRI_PASSWORD=your-password
+# Naukri Google SSO credentials are configured in src/main.py
 
 # Email notifications (Gmail App Password)
 SMTP_EMAIL=john@gmail.com
@@ -145,9 +139,7 @@ job-cron/
 │   ├── database.py          # SQLite job tracking
 │   └── job_scraper/
 │       ├── base.py          # Base Selenium scraper
-│       ├── linkedin.py      # LinkedIn Easy Apply
-│       ├── naukri.py        # Naukri auto-apply
-│       └── indeed.py        # Indeed auto-apply
+│       └── naukri.py        # Naukri auto-apply
 ├── data/
 │   └── jobs.db              # Auto-created SQLite database
 ├── logs/                    # Daily log files
@@ -179,8 +171,7 @@ You'll receive emails for:
 
 | Variable | Description |
 |----------|-------------|
-| `LINKEDIN_EMAIL` / `PASSWORD` | LinkedIn credentials |
-| `NAUKRI_EMAIL` / `PASSWORD` | Naukri credentials |
+| `NAUKRI_SSO_EMAIL` / `NAUKRI_SSO_PASSWORD` | Google account used for Naukri SSO |
 | `SMTP_EMAIL` / `PASSWORD` | Gmail for sending notifications |
 | `NOTIFY_EMAIL` | Where to receive alerts |
 | `RESUME_PATH` | Path to resume file |
@@ -203,10 +194,10 @@ You'll receive emails for:
 
 ## Troubleshooting
 
-**Bot can't login to LinkedIn/Naukri**
+**Bot can't login to Naukri**
 - Check credentials in `.env`
 - Set `BROWSER_HEADLESS=false` to watch what happens
-- LinkedIn may require CAPTCHA - you'll get an email about it
+- Naukri may require CAPTCHA - you'll get an email about it
 
 **No jobs being found**
 - Check job titles and locations in `config.yaml`
@@ -222,7 +213,6 @@ You'll receive emails for:
 ## ⚠️ Important Notes
 
 1. **Rate Limiting**: The bot has built-in delays to avoid being flagged. Don't reduce them.
-2. **LinkedIn**: Uses Easy Apply only by default. External applications trigger email notifications.
-3. **Naukri**: Some jobs redirect to company portals - you'll be notified via email.
-4. **Terms of Service**: Automated applications may violate platform ToS. Use at your own risk.
-5. **Credentials**: Never commit your `.env` file. It's gitignored by default.
+2. **Naukri**: Some jobs redirect to company portals - you'll be notified via email.
+3. **Terms of Service**: Automated applications may violate platform ToS. Use at your own risk.
+4. **Credentials**: Never commit your `.env` file. It's gitignored by default.

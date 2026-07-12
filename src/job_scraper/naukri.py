@@ -29,78 +29,118 @@ class NaukriScraper(BaseScraper):
     LOGIN_URL = "https://www.naukri.com/nlogin/login"
 
     def login(self, email: str, password: str) -> bool:
-        """Login to Naukri."""
+        """Login to Naukri through the Google SSO flow."""
         if not email or not password:
-            logger.error("[Naukri] Missing credentials. Set NAUKRI_EMAIL and NAUKRI_PASSWORD")
+            logger.error("[Naukri] Missing Google SSO credentials")
             return False
         try:
             self.start()
             self._safe_get(self.LOGIN_URL, wait_seconds=4)
 
-            # Naukri login form uses ids 'usernameField' and 'passwordField'.
-            # Fall back to common selectors if ids are not present.
-            email_field = None
+            sso_button = None
             for locator in [
-                (By.ID, "usernameField"),
-                (By.NAME, "email"),
-                (By.CSS_SELECTOR, "input[placeholder*='Email' i]"),
-                (By.CSS_SELECTOR, "input[placeholder*='Username' i]"),
-                (By.CSS_SELECTOR, "form input[type='text']"),
+                (By.XPATH, "//button[contains(translate(., 'GOOGLE', 'google'), 'google')]"),
+                (By.XPATH, "//*[contains(@class, 'google') and (self::button or self::a)]"),
+                (By.CSS_SELECTOR, "button[data-google-login], a[href*='google']"),
             ]:
                 try:
-                    email_field = self._wait_for_element(*locator, timeout=8)
-                    if email_field and email_field.is_displayed():
+                    sso_button = self._wait_for_clickable(*locator, timeout=8)
+                    if sso_button and sso_button.is_displayed():
                         break
                 except TimeoutException:
                     continue
-            if not email_field:
-                logger.error("[Naukri] Could not locate email field")
+            if not sso_button:
+                logger.error("[Naukri] Could not locate Google SSO button")
                 if not self.headless:
                     self._keep_open_on_failure = True
                 return False
 
-            if not self._type_into(email_field, email):
-                logger.warning("[Naukri] Failed to type email reliably")
+            original_handles = set(self.driver.window_handles)
+            sso_button.click()
+            time.sleep(4)
+
+            new_handles = set(self.driver.window_handles) - original_handles
+            if new_handles:
+                self.driver.switch_to.window(next(iter(new_handles)))
+
+            email_field = None
+            for locator in [
+                (By.ID, "identifierId"),
+                (By.NAME, "identifier"),
+                (By.CSS_SELECTOR, "input[type='email']"),
+                (By.CSS_SELECTOR, "input[autocomplete='username']"),
+            ]:
+                try:
+                    email_field = self._wait_for_element(*locator, timeout=4)
+                    if email_field and email_field.is_displayed():
+                        break
+                except TimeoutException:
+                    continue
+
+            if email_field:
+                if not self._type_into(email_field, email):
+                    logger.warning("[Naukri] Failed to type Google SSO email reliably")
+                try:
+                    next_button = self.driver.find_element(
+                        By.XPATH,
+                        "//button[@id='identifierNext' or @type='submit' or contains(translate(., 'NEXT', 'next'), 'next')]",
+                    )
+                    next_button.click()
+                except NoSuchElementException:
+                    email_field.send_keys(Keys.RETURN)
+                time.sleep(3)
+
+            account = None
+            for locator in [
+                (By.XPATH, f"//*[normalize-space()='{email}']"),
+                (By.XPATH, f"//*[contains(normalize-space(), '{email}') and (self::div or self::li or self::button)]"),
+            ]:
+                try:
+                    account = self._wait_for_clickable(*locator, timeout=8)
+                    if account and account.is_displayed():
+                        break
+                except (NoSuchElementException, TimeoutException):
+                    continue
+
+            if account:
+                account.click()
+                time.sleep(2)
 
             password_field = None
             for locator in [
-                (By.ID, "passwordField"),
-                (By.NAME, "password"),
                 (By.CSS_SELECTOR, "input[type='password']"),
+                (By.NAME, "Passwd"),
             ]:
                 try:
-                    password_field = self.driver.find_element(*locator)
+                    password_field = self._wait_for_element(*locator, timeout=8)
                     if password_field and password_field.is_displayed():
                         break
-                except NoSuchElementException:
+                except TimeoutException:
                     continue
             if not password_field:
-                logger.error("[Naukri] Could not locate password field")
+                logger.error("[Naukri] Could not locate Google SSO password field")
                 if not self.headless:
                     self._keep_open_on_failure = True
                 return False
 
             if not self._type_into(password_field, password):
-                logger.warning("[Naukri] Failed to type password reliably")
+                logger.warning("[Naukri] Failed to type Google SSO password reliably")
 
-            # Click login
             try:
                 login_btn = self.driver.find_element(
                     By.XPATH,
-                    "//button[@type='submit' or contains(translate(., 'LOGIN', 'login'), 'login')]",
+                    "//button[@type='submit' or @id='passwordNext' or contains(translate(., 'NEXT', 'next'), 'next')]",
                 )
                 login_btn.click()
             except NoSuchElementException:
                 password_field.send_keys(Keys.RETURN)
 
-            time.sleep(6)
+            time.sleep(8)
 
-            # Handle OTP if requested
             if self._handle_otp_if_present():
                 time.sleep(5)
 
-            # Check login success
-            if "nlogin" not in self.driver.current_url:
+            if "nlogin" not in self.driver.current_url and "accounts.google.com" not in self.driver.current_url:
                 logger.info("[Naukri] Login successful")
                 return True
 
@@ -121,7 +161,7 @@ class NaukriScraper(BaseScraper):
                     self._keep_open_on_failure = True
                 return False
 
-            logger.warning("[Naukri] Login may have failed")
+            logger.warning("[Naukri] Google SSO login may have failed")
             if not self.headless:
                 self._keep_open_on_failure = True
             return False
