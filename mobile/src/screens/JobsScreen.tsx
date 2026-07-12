@@ -11,46 +11,55 @@ import { C, statusColor, statusBg, fmtDate } from '../theme';
 const FILTERS = ['all', 'applied', 'manual_needed', 'failed', 'skipped'] as const;
 type Filter = typeof FILTERS[number];
 
-// ── Job card ───────────────────────────────────────────────────────────────────
+// ── Job card ──────────────────────────────────────────────────────────────────
 
-function JobCard({ job }: { job: LocalJob }) {
-  const openUrl = () => {
-    if (job.url) Linking.openURL(job.url).catch(() => {});
+function JobCard({ job, onApplied }: { job: LocalJob; onApplied: () => void }) {
+  const score      = Math.round(job.match_score ?? 0);
+  const scoreColor = score >= 70 ? C.green : score >= 40 ? C.orange : C.gray;
+  const isApplied  = job.status === 'applied';
+
+  const handleApply = async () => {
+    if (!job.url) { Alert.alert('No link', 'This job has no URL.'); return; }
+    await updateJobStatus(job.job_id, 'applied');
+    onApplied();
+    Linking.openURL(job.url).catch(() => Alert.alert('Error', 'Could not open link.'));
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={openUrl} activeOpacity={0.75}>
+    <View style={styles.card}>
       <View style={styles.cardTop}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{job.title}</Text>
+        <View style={[styles.scoreRing, { borderColor: scoreColor }]}>
+          <Text style={[styles.scoreNum, { color: scoreColor }]}>{score}</Text>
+          <Text style={styles.scorePct}>%</Text>
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{job.title}</Text>
+          <Text style={styles.cardCompany} numberOfLines={1}>
+            {[job.company, job.location].filter(Boolean).join(' · ') || '—'}
+          </Text>
+        </View>
         <View style={[styles.badge, { backgroundColor: statusBg(job.status) }]}>
           <Text style={[styles.badgeText, { color: statusColor(job.status) }]}>
             {job.status.replace('_', ' ')}
           </Text>
         </View>
       </View>
-
-      <Text style={styles.cardCompany} numberOfLines={1}>
-        {[job.company, job.location].filter(Boolean).join(' · ') || '—'}
-      </Text>
-
-      <View style={styles.cardMeta}>
-        <View style={styles.metaChip}>
-          <Ionicons name="trophy-outline" size={11} color={C.accent} />
-          <Text style={styles.metaText}>{Math.round(job.match_score ?? 0)}% match</Text>
-        </View>
+      <View style={styles.cardFooter}>
         <View style={styles.metaChip}>
           <Ionicons name="calendar-outline" size={11} color={C.textMuted} />
           <Text style={styles.metaText}>{fmtDate(job.discovered_at)}</Text>
         </View>
-        {job.applied_at && (
-          <View style={styles.metaChip}>
-            <Ionicons name="checkmark-circle-outline" size={11} color={C.green} />
-            <Text style={[styles.metaText, { color: C.green }]}>{fmtDate(job.applied_at)}</Text>
-          </View>
-        )}
-        <Ionicons name="open-outline" size={13} color={C.textMuted} style={{ marginLeft: 'auto' }} />
+        {isApplied
+          ? <View style={styles.appliedBadge}>
+              <Ionicons name="checkmark-circle" size={13} color={C.green} />
+              <Text style={[styles.applyBtnText, { color: C.green }]}>Applied {fmtDate(job.applied_at)}</Text>
+            </View>
+          : <TouchableOpacity style={styles.applyBtn} onPress={handleApply} activeOpacity={0.8}>
+              <Ionicons name="send" size={13} color="#fff" />
+              <Text style={styles.applyBtnText}>Apply Now</Text>
+            </TouchableOpacity>}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
