@@ -1,9 +1,13 @@
 /**
  * Core bot cycle — runs entirely on-device.
- * Fetches jobs via HTTP, scores them, saves to local SQLite.
+ * Mirrors the Python bot's pipeline:
+ *   1. Login with Naukri credentials (if configured)
+ *   2. Fetch recommended jobs (authenticated) OR keyword search (public)
+ *   3. Score against user skills
+ *   4. Save to local SQLite
  * No Python server or PC required.
  */
-import { searchNaukri } from './naukri';
+import { searchNaukri, getRecommendedJobs, loginNaukri, getStoredToken, clearToken } from './naukri';
 import { isNewJob, saveJob, getStats, addLog } from './database';
 import { scoreJob } from './matcher';
 import { loadSettings } from './settings';
@@ -49,63 +53,88 @@ export async function runBotCycle(): Promise<{ newJobs: number; matched: number 
     const settings = await loadSettings();
     await log(`Starting cycle — ${settings.keywords.length} keyword(s) in ${settings.location}`);
 
-    const seen = new Set<string>();
+    const seen    = new Set<string>();
+    let authToken: string | null = null;
 
+    // ── Step 1: Login (mirrors Python bot's login flow) ─────────────────────
+    if (settings.naukriEmail && settings.naukriPassword) {
+      await log('Attempting Naukri login…');
+      // Try stored token first to avoid re-logging every cycle
+      const stored = await getStoredToken();
+      if (stored) {
+        authToken = stored;
+        await log('Using cached Naukri session');
+      } else {
+        authToken = await loginNaukri(settings.naukriEmail, settings.naukriPassword);
+        if (authToken) {
+          await log('Naukri login successful');
+        } else {
+          await log('Naukri login failed — falling back to public search', 'error');
+          await clearToken();
+        }
+      }
+    }
+
+    // ── Step 2: Fetch jobs ───────────────────────────────────────────────────
+    const allJobs: import('./naukri').NaukriJob[] = [];
+
+    if (authToken && settings.useRecommended) {
+      // Recommended jobs (personalised feed — mirrors Python bot's get_recommended_jobs)
+      await log('Fetching recommended jobs from Naukri…');
+      try {
+        const rec = await getRecommendedJobs(authToken, settings.maxPagesPerSearch);
+        await log(`Recommended jobs: ${rec.length} fetched`);
+        for (const j of rec) seen.has(j.jobId) || (seen.add(j.jobId), allJobs.push(j));
+      } catch (err: any) {
+        await log(`Recommended jobs error: ${err?.message ?? err}`, 'error');
+        // Token may have expired — clear it so next run re-logs in
+        await clearToken();
+        authToken = null;
+      }
+    }
+
+    // Always also search by keyword (authenticated search returns better results when logged in)
     for (const keyword of settings.keywords) {
       await log(`Searching: "${keyword}" in ${settings.location}`);
       try {
         const jobs = await searchNaukri(
-          keyword,
-          settings.location,
-          settings.experienceYears,
-          settings.maxPagesPerSearch,
+          keyword, settings.location, settings.experienceYears,
+          settings.maxPagesPerSearch, authToken ?? undefined,
         );
         await log(`Found ${jobs.length} jobs for "${keyword}"`);
-
-        for (const job of jobs) {
-          if (seen.has(job.jobId)) continue;
-          seen.add(job.jobId);
-
-          const isNew = await isNewJob(job.jobId);
-          if (!isNew) continue;
-
-          newJobs++;
-          const score = scoreJob(job, settings.skills);
-          const status =
-            score >= settings.minMatchScore ? 'matched' : 'skipped';
-
-          if (score >= settings.minMatchScore) matched++;
-
-          await saveJob({
-            jobId:       job.jobId,
-            title:       job.title,
-            company:     job.company,
-            location:    job.location,
-            url:         job.url,
-            description: job.description,
-            skills:      job.skills,
-            matchScore:  score,
-            status,
-          });
-
-          if (score >= settings.minMatchScore) {
-            await log(`Match (${score}%): ${job.title} @ ${job.company}`);
-          }
-        }
+        for (const j of jobs) seen.has(j.jobId) || (seen.add(j.jobId), allJobs.push(j));
       } catch (err: any) {
-        await log(`Error fetching "${keyword}": ${err?.message ?? err}`, 'error');
+        await log(`Error searching "${keyword}": ${err?.message ?? err}`, 'error');
+      }
+    }
+
+    await log(`Total unique jobs this cycle: ${allJobs.length}`);
+
+    // ── Step 3: Score + save ─────────────────────────────────────────────────
+    for (const job of allJobs) {
+      const isNew = await isNewJob(job.jobId);
+      if (!isNew) continue;
+
+      newJobs++;
+      const score  = scoreJob(job, settings.skills);
+      const status = score >= settings.minMatchScore ? 'matched' : 'skipped';
+      if (score >= settings.minMatchScore) matched++;
+
+      await saveJob({
+        jobId: job.jobId, title: job.title, company: job.company,
+        location: job.location, url: job.url, description: job.description,
+        skills: job.skills, matchScore: score, status,
+      });
+
+      if (score >= settings.minMatchScore) {
+        await log(`Match (${score}%): ${job.title} @ ${job.company}`);
       }
     }
 
     const stats = await getStats();
-    await log(
-      `Cycle done — ${newJobs} new, ${matched} matched | total: ${stats.total} applied: ${stats.applied}`,
-    );
+    await log(`Cycle done — ${newJobs} new, ${matched} matched | total: ${stats.total} applied: ${stats.applied}`);
 
-    if (newJobs > 0) {
-      await sendJobsFoundNotification(newJobs, matched);
-    }
-
+    if (newJobs > 0) await sendJobsFoundNotification(newJobs, matched);
     await setRunStatus({ running: false, lastResult: 'success' });
   } catch (err: any) {
     const msg = err?.message ?? String(err);

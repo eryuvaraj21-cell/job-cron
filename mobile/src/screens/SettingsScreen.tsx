@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { loadSettings, saveSettings, BotSettings } from '../services/settings';
 import { requestPermissions } from '../services/notifications';
+import { loginNaukri, clearToken } from '../services/naukri';
 import { C } from '../theme';
 
 function Field({ label, value, onChangeText, placeholder, multiline = false, keyboardType = 'default' }: {
@@ -35,6 +36,9 @@ export default function SettingsScreen() {
   const [minScore, setMinScore] = useState('');
   const [interval, setInterval] = useState('');
   const [pages,    setPages]    = useState('');
+  const [naukriEmail,    setNaukriEmail]    = useState('');
+  const [naukriPassword, setNaukriPassword] = useState('');
+  const [loginStatus, setLoginStatus]       = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
   useEffect(() => {
     loadSettings().then(s => {
@@ -46,6 +50,8 @@ export default function SettingsScreen() {
       setMinScore(String(s.minMatchScore));
       setInterval(String(s.intervalMinutes));
       setPages(String(s.maxPagesPerSearch));
+      setNaukriEmail(s.naukriEmail ?? '');
+      setNaukriPassword(s.naukriPassword ?? '');
     });
   }, []);
 
@@ -60,11 +66,14 @@ export default function SettingsScreen() {
         minMatchScore:     parseInt(minScore)   || 30,
         intervalMinutes:   parseInt(interval)   || 30,
         maxPagesPerSearch: parseInt(pages)       || 3,
+        naukriEmail:       naukriEmail.trim(),
+        naukriPassword:    naukriPassword,
+        useRecommended:    true,
       });
       Alert.alert('Saved', 'Settings saved. Changes take effect on next run.');
     } catch { Alert.alert('Error', 'Could not save.'); }
     finally { setSaving(false); }
-  }, [keywords, location, skills, experience, minScore, interval, pages]);
+  }, [keywords, location, skills, experience, minScore, interval, pages, naukriEmail, naukriPassword]);
 
   if (!settings) return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -96,7 +105,41 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>⏱ Schedule</Text>
+            <Text style={styles.cardTitle}>🔐 Naukri Account</Text>
+            <Text style={styles.cardDesc}>
+              Enter your Naukri credentials to enable personalised recommended jobs (same as the Python bot). Leave blank to use public search only.
+            </Text>
+            <Field label="Naukri Email" value={naukriEmail} onChangeText={e => { setNaukriEmail(e); setLoginStatus('idle'); }}
+              placeholder="eryuvaraj21@gmail.com" keyboardType="email-address" />
+            <Field label="Naukri Password" value={naukriPassword} onChangeText={p => { setNaukriPassword(p); setLoginStatus('idle'); }}
+              placeholder="Your Naukri password" />
+            <TouchableOpacity
+              style={[styles.notifBtn, loginStatus === 'ok' && { borderColor: C.green }, loginStatus === 'fail' && { borderColor: C.red }]}
+              disabled={loginStatus === 'testing'}
+              onPress={async () => {
+                if (!naukriEmail || !naukriPassword) { Alert.alert('Missing', 'Enter email and password first.'); return; }
+                setLoginStatus('testing');
+                await clearToken();
+                const token = await loginNaukri(naukriEmail, naukriPassword);
+                setLoginStatus(token ? 'ok' : 'fail');
+                Alert.alert(
+                  token ? '✅ Login OK' : '❌ Login Failed',
+                  token ? 'Naukri login successful. Recommended jobs will be fetched on next run.' : 'Check your email/password.',
+                );
+              }}>
+              {loginStatus === 'testing'
+                ? <ActivityIndicator size="small" color={C.accentLight} />
+                : <Ionicons name={loginStatus === 'ok' ? 'checkmark-circle' : loginStatus === 'fail' ? 'close-circle' : 'log-in-outline'}
+                    size={18} color={loginStatus === 'ok' ? C.green : loginStatus === 'fail' ? C.red : C.accentLight} />}
+              <Text style={[styles.notifBtnText, {
+                color: loginStatus === 'ok' ? C.green : loginStatus === 'fail' ? C.red : C.accentLight
+              }]}>
+                {loginStatus === 'testing' ? 'Testing…' : loginStatus === 'ok' ? 'Connected' : loginStatus === 'fail' ? 'Login failed' : 'Test Naukri login'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
             <Field label="Background run interval (minutes)" value={interval} onChangeText={setInterval} placeholder="30" keyboardType="number-pad" />
             <Text style={styles.cardDesc}>Android limits background tasks to ~15 min minimum.</Text>
           </View>

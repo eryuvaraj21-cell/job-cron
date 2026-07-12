@@ -3,23 +3,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = 'bot_settings_v2';
 
 export interface BotSettings {
-  keywords:        string[];   // ["node.js developer", "backend developer"]
-  location:        string;     // "bangalore"
-  skills:          string[];   // ["javascript", "node.js", "mongodb", ...]
-  experienceYears: number;     // 4
-  minMatchScore:   number;     // 40
-  intervalMinutes: number;     // 30
-  maxPagesPerSearch: number;   // 3
+  keywords:          string[];
+  location:          string;
+  skills:            string[];
+  experienceYears:   number;
+  minMatchScore:     number;
+  intervalMinutes:   number;
+  maxPagesPerSearch: number;
+  // Naukri account (enables recommended-jobs feed & authenticated search)
+  naukriEmail:       string;
+  naukriPassword:    string;
+  useRecommended:    boolean;  // true = fetch recommended jobs (requires login)
 }
 
 const DEFAULTS: BotSettings = {
-  keywords:        ['node.js developer', 'backend developer'],
-  location:        'bangalore',
-  skills:          ['javascript', 'typescript', 'node.js', 'express', 'mongodb', 'react', 'rest api', 'docker'],
-  experienceYears: 4,
-  minMatchScore:   30,
-  intervalMinutes: 30,
+  keywords:          ['node.js developer', 'backend developer'],
+  location:          'bangalore',
+  skills:            ['javascript', 'typescript', 'node.js', 'express', 'mongodb', 'react', 'rest api', 'docker'],
+  experienceYears:   4,
+  minMatchScore:     30,
+  intervalMinutes:   30,
   maxPagesPerSearch: 3,
+  naukriEmail:       '',
+  naukriPassword:    '',
+  useRecommended:    true,
 };
 
 export async function loadSettings(): Promise<BotSettings> {
