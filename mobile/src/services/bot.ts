@@ -66,7 +66,6 @@ export async function runBotCycle(): Promise<{ newJobs: number; matched: number 
         await log('No cached Naukri session — go to Settings → Naukri Account → Login via browser', 'error');
       }
     }
-    }
 
     // ── Step 2: Fetch jobs ───────────────────────────────────────────────────
     const allJobs: import('./naukri').NaukriJob[] = [];
