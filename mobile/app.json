@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Job Bot",
+    "slug": "job-bot-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#030712"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yuvaraj.jobbot"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#030712"
+      },
+      "package": "com.yuvaraj.jobbot",
+      "permissions": ["INTERNET"]
+    },
+    "scheme": "jobbot",
+    "plugins": []
+  }
+}
