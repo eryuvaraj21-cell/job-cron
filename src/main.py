@@ -27,7 +27,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.resume_parser import ResumeParser
 from src.job_matcher import JobMatcher
-from src.job_scraper.linkedin import LinkedInScraper
 from src.job_scraper.naukri import NaukriScraper
 from src.email_notifier import EmailNotifier
 from src import database as db
@@ -39,13 +38,9 @@ HARDCODED = {
     "YOUR_EMAIL": "eryuvaraj21@gmail.com",
     "YOUR_PHONE": "+91-9999999999",
 
-    # LinkedIn
-    "LINKEDIN_EMAIL": "eryuvaraj21@gmail.com",
-    "LINKEDIN_PASSWORD": "PSEue1-8xypL1qU",
-
-    # Naukri
-    "NAUKRI_EMAIL": "eryuvaraj21@gmail.com",
-    "NAUKRI_PASSWORD": "Yuvinaukripwd123@@",
+    # Naukri Google SSO
+    "NAUKRI_SSO_EMAIL": "eryuvaraj21@gmail.com",
+    "NAUKRI_SSO_PASSWORD": "Testgmailpwd123@@",
 
     # Email notifications (optional - leave blank to disable)
     "SMTP_HOST": "smtp.gmail.com",
@@ -321,8 +316,8 @@ def run_job_cycle():
         applied, manual = process_platform(
             scraper,
             platform_configs["naukri"],
-            HARDCODED["NAUKRI_EMAIL"],
-            HARDCODED["NAUKRI_PASSWORD"],
+            HARDCODED["NAUKRI_SSO_EMAIL"],
+            HARDCODED["NAUKRI_SSO_PASSWORD"],
             profile, matcher, resume_path, notifier,
         )
         all_applied.extend(applied)
