@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, Linking, ScrollView, ActivityIndicator,
+  RefreshControl, Linking, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getJobs, LocalJob } from '../services/database';
+import { getJobs, LocalJob, updateJobStatus } from '../services/database';
 import { C, statusColor, statusBg, fmtDate } from '../theme';
 
 const FILTERS = ['all', 'applied', 'manual_needed', 'failed', 'skipped'] as const;
@@ -63,11 +63,9 @@ export default function JobsScreen() {
   const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
-    try {
-      const data = await getJobs(150);
-      setJobs(data);
-    } catch { /* keep showing stale data */ }
-    finally   { setLoading(false); }
+    try { setJobs(await getJobs(200)); }
+    catch { /* stale */ }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -82,24 +80,19 @@ export default function JobsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>💼 Jobs</Text>
-        <Text style={styles.headerCount}>{displayed.length} shown</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.headerCount}>{displayed.length}</Text>
+          <Text style={styles.headerCountLabel}> jobs</Text>
+        </View>
       </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f}
+          <TouchableOpacity key={f}
             style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
+            onPress={() => setFilter(f)}>
             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
               {f === 'all' ? 'All' : f.replace('_', ' ')}
             </Text>
@@ -108,22 +101,21 @@ export default function JobsScreen() {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={C.accent} />
-        </View>
+        <View style={styles.center}><ActivityIndicator color={C.accentMid} /></View>
       ) : displayed.length === 0 ? (
         <View style={styles.center}>
-          <Ionicons name="briefcase-outline" size={48} color={C.border} />
-          <Text style={styles.emptyText}>No jobs found</Text>
+          <View style={styles.emptyIcon}><Ionicons name="briefcase-outline" size={32} color={C.textMuted} /></View>
+          <Text style={styles.emptyTitle}>No jobs yet</Text>
+          <Text style={styles.emptyText}>Tap Launch on the Dashboard to start</Text>
         </View>
       ) : (
         <FlatList
           data={displayed}
           keyExtractor={item => String(item.id)}
-          renderItem={({ item }) => <JobCard job={item} />}
+          renderItem={({ item }) => <JobCard job={item} onApplied={load} />}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accentMid} />}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
     </SafeAreaView>
@@ -133,27 +125,41 @@ export default function JobsScreen() {
 const styles = StyleSheet.create({
   safeArea:         { flex: 1, backgroundColor: C.bg },
   header:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                      paddingHorizontal: 16, paddingVertical: 12,
-                      borderBottomWidth: 1, borderBottomColor: C.border },
-  headerTitle:      { fontSize: 18, fontWeight: '700', color: C.text },
-  headerCount:      { fontSize: 12, color: C.textMuted },
-  filterRow:        { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
-  filterChip:       { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 50,
+                      paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  headerTitle:      { fontSize: 18, fontWeight: '800', color: C.text },
+  headerRight:      { flexDirection: 'row', alignItems: 'baseline' },
+  headerCount:      { fontSize: 18, fontWeight: '800', color: C.accentLight },
+  headerCountLabel: { fontSize: 12, color: C.textMuted },
+  filterRow:        { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  filterChip:       { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 50,
                       backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
-  filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+  filterChipActive: { backgroundColor: C.accentBg, borderColor: C.accentMid },
   filterText:       { fontSize: 12, color: C.textSub, fontWeight: '500' },
-  filterTextActive: { color: '#fff', fontWeight: '700' },
-  list:             { padding: 14, paddingBottom: 32 },
-  center:           { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyText:        { color: C.textMuted, fontSize: 14 },
+  filterTextActive: { color: C.accentLight, fontWeight: '700' },
+  list:             { padding: 16, paddingBottom: 32 },
+  center:           { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  emptyIcon:        { width: 64, height: 64, borderRadius: 20, backgroundColor: C.card,
+                      alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle:       { fontSize: 15, fontWeight: '700', color: C.textSub },
+  emptyText:        { fontSize: 12, color: C.textMuted, textAlign: 'center', paddingHorizontal: 32 },
   card:             { backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
-                      borderRadius: 16, padding: 14 },
-  cardTop:          { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
-  cardTitle:        { flex: 1, fontSize: 14, fontWeight: '600', color: C.blue, lineHeight: 20 },
-  badge:            { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 50 },
-  badgeText:        { fontSize: 10, fontWeight: '700' },
-  cardCompany:      { fontSize: 12, color: C.textSub, marginBottom: 10 },
-  cardMeta:         { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+                      borderRadius: 18, padding: 14, gap: 12,
+                      shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 2 },
+  cardTop:          { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  scoreRing:        { width: 44, height: 44, borderRadius: 12, borderWidth: 2,
+                      alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  scoreNum:         { fontSize: 13, fontWeight: '800', lineHeight: 16 },
+  scorePct:         { fontSize: 8, color: C.textMuted, lineHeight: 10 },
+  cardTitle:        { fontSize: 14, fontWeight: '700', color: C.text, lineHeight: 20 },
+  cardCompany:      { fontSize: 11, color: C.textSub },
+  badge:            { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 50, flexShrink: 0 },
+  badgeText:        { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardFooter:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metaChip:         { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText:         { fontSize: 11, color: C.textMuted },
+  applyBtn:         { flexDirection: 'row', alignItems: 'center', gap: 6,
+                      backgroundColor: C.accent, paddingHorizontal: 14, paddingVertical: 8,
+                      borderRadius: 50, shadowColor: C.accent, shadowOpacity: 0.4, shadowRadius: 8, elevation: 3 },
+  appliedBadge:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  applyBtnText:     { fontSize: 12, fontWeight: '700', color: '#fff' },
 });
