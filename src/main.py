@@ -293,8 +293,9 @@ def run_job_cycle():
     matcher = get_matcher()
     notifier = get_notifier()
     resume_path = HARDCODED["RESUME_PATH"]
-    # GitHub Actions has no X server, so Chrome must run headlessly in CI.
-    headless = bool(HARDCODED["BROWSER_HEADLESS"]) or os.environ.get("GITHUB_ACTIONS") == "true"
+    # Headless mode is required on Linux runners without an X display.
+    no_display = os.name == "posix" and not os.environ.get("DISPLAY")
+    headless = bool(HARDCODED["BROWSER_HEADLESS"]) or no_display
     chrome_binary = HARDCODED["CHROME_BINARY_PATH"]
 
     otp_config = {
