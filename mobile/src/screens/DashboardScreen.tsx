@@ -77,19 +77,6 @@ export default function DashboardScreen() {
       <ScrollView contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accentMid} />}>
 
-        {showBot && (
-          <NaukriBotSession
-            onClose={(result: BotResult) => {
-              setShowBot(false);
-              load();
-              Alert.alert(
-                '✅ Cycle complete',
-                `Applied: ${result.applied}  |  Skipped: ${result.skipped}  |  Total found: ${result.total}`,
-              );
-            }}
-          />
-        )}
-
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>
             {isRunning ? 'Searching Naukri…' :
@@ -147,6 +134,19 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+
+      {showBot && (
+        <NaukriBotSession
+          onClose={(result: BotResult) => {
+            setShowBot(false);
+            load();
+            Alert.alert(
+              '✅ Cycle complete',
+              `Applied: ${result.applied}  |  Skipped: ${result.skipped}  |  Total found: ${result.total}`,
+            );
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
