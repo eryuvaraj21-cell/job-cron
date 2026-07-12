@@ -48,42 +48,50 @@ export async function loginNaukri(
   if (!email || !password)
     return { token: null, error: 'Email and password are required' };
 
-  // Headers that replicate what the browser sends from nlogin/login
+  const LOGIN_URL = `${BASE}/nlogin/login`;
+
   const loginHeaders = {
     'appid':          '109',
     'systemid':       'Naukri',
     'clientid':       'd3skt0p',
-    'Content-Type':   'application/json',
     'Accept':         'application/json, text/plain, */*',
-    'Referer':        `${BASE}/nlogin/login`,
+    'Referer':        LOGIN_URL,
     'Origin':         BASE,
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   };
 
-  // Try primary endpoint (used by the nlogin/login page)
-  const endpoints = [
-    { url: `${BASE}/central-login-services/v2/login`,        body: { username: email, password } },
-    { url: `${BASE}/central-login-services/v1/login`,        body: { username: email, password } },
+  // Try JSON body first, then form-encoded
+  const attempts: Array<{ contentType: string; body: string }> = [
+    {
+      contentType: 'application/json',
+      body: JSON.stringify({ username: email, password }),
+    },
+    {
+      contentType: 'application/x-www-form-urlencoded',
+      body: `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
+    },
   ];
 
-  for (const { url, body } of endpoints) {
+  for (const { contentType, body } of attempts) {
     try {
-      const resp = await axios.post(url, body, {
-        headers: loginHeaders,
+      const resp = await axios.post(LOGIN_URL, body, {
+        headers: { ...loginHeaders, 'Content-Type': contentType },
         timeout: 20_000,
-        validateStatus: () => true, // don't throw on 4xx — handle manually
+        maxRedirects: 5,
+        validateStatus: () => true,
       });
 
-      // Extract token from wherever Naukri puts it
       const d = resp.data ?? {};
+
+      // Extract token from response body or headers
       const token =
         d?.loginResult?.clientData?.authToken ??
-        d?.loginResult?.authToken ??
-        d?.authToken ??
-        d?.jdToken ??
-        resp.headers?.['x-auth-token'] ??
-        resp.headers?.['authtoken'] ??
+        d?.loginResult?.authToken       ??
+        d?.authToken                    ??
+        d?.jdToken                      ??
+        resp.headers?.['x-auth-token']  ??
+        resp.headers?.['authtoken']     ??
         null;
 
       if (token) {
@@ -91,25 +99,31 @@ export async function loginNaukri(
         return { token, error: null };
       }
 
-      // Login succeeded HTTP-wise but no token — surface the message
-      if (resp.status === 200 && !token) {
-        const msg = d?.message ?? d?.error ?? 'Login response contained no token';
-        return { token: null, error: `HTTP 200 but no token: ${msg}` };
+      // Surface the exact error message from Naukri
+      if (resp.status >= 400) {
+        const msg = d?.message ?? d?.error ?? d?.errorMessage ?? `HTTP ${resp.status}`;
+        return { token: null, error: msg };
       }
 
-      if (resp.status === 401 || resp.status === 403) {
-        const msg = d?.message ?? d?.error ?? 'Invalid credentials';
-        return { token: null, error: `HTTP ${resp.status}: ${msg}` };
+      // HTTP 200 but no token — log what we got for debugging
+      if (resp.status === 200) {
+        const preview = typeof d === 'string'
+          ? d.slice(0, 120)
+          : JSON.stringify(d).slice(0, 120);
+        return { token: null, error: `Login responded 200 but no token found. Response: ${preview}` };
       }
 
     } catch (err: any) {
-      // Only continue to the next endpoint on network-level errors
-      if (!err?.response) continue;
-      return { token: null, error: err.message ?? String(err) };
+      if (err?.response) {
+        const d = err.response.data ?? {};
+        return { token: null, error: d?.message ?? err.message ?? String(err) };
+      }
+      // Network error — try next format
+      continue;
     }
   }
 
-  return { token: null, error: 'All login endpoints failed — check your internet connection' };
+  return { token: null, error: 'Could not reach Naukri login endpoint — check internet connection' };
 }
 
 // ── Job shape ─────────────────────────────────────────────────────────────────
