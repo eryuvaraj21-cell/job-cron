@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Job Bot · Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' }</script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .pulse-dot { animation: pulse 1.8s cubic-bezier(0.4,0,0.6,1) infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .badge-applied   { background:#16a34a22; color:#4ade80; border:1px solid #16a34a44; }
+  .badge-failed    { background:#dc262622; color:#f87171; border:1px solid #dc262644; }
+  .badge-manual    { background:#d9770622; color:#fb923c; border:1px solid #d9770644; }
+  .badge-skipped   { background:#71717122; color:#a1a1aa; border:1px solid #71717144; }
+  .badge-matched   { background:#2563eb22; color:#60a5fa; border:1px solid #2563eb44; }
+  .badge-discovered{ background:#71717122; color:#a1a1aa; border:1px solid #71717144; }
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-thumb { background:#4b5563; border-radius:2px; }
+  #log-panel { font-family: 'Fira Code', 'Courier New', monospace; font-size:11px; }
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<!-- Top nav -->
+<header class="sticky top-0 z-40 bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between shadow-lg">
+  <div class="flex items-center gap-2">
+    <span class="text-xl">🤖</span>
+    <span class="font-bold text-base">Job Bot</span>
+    <span id="env-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400">Naukri</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-gray-600"></span>
+    <button id="run-btn"
+      onclick="triggerRun()"
+      class="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all px-4 py-1.5 rounded-full text-sm font-semibold shadow-md">
+      ▶ Run Now
+    </button>
+  </div>
+</header>
+
+<!-- Body -->
+<main class="max-w-lg mx-auto px-4 pb-20 pt-4 space-y-4">
+
+  <!-- Status banner -->
+  <div id="status-banner" class="rounded-2xl bg-gray-900 border border-gray-800 px-4 py-3 flex items-center gap-3">
+    <div id="banner-icon" class="text-2xl">⏳</div>
+    <div>
+      <div id="banner-title" class="font-semibold text-sm">Loading…</div>
+      <div id="banner-sub" class="text-xs text-gray-400 mt-0.5">—</div>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="grid grid-cols-2 gap-3">
+    <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+      <div class="text-xs text-gray-400 mb-1">Applied today</div>
+      <div id="stat-today-applied" class="text-3xl font-bold text-green-400">—</div>
+    </div>
+    <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+      <div class="text-xs text-gray-400 mb-1">Total applied</div>
+      <div id="stat-total-applied" class="text-3xl font-bold text-indigo-400">—</div>
+    </div>
+    <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+      <div class="text-xs text-gray-400 mb-1">Manual needed</div>
+      <div id="stat-manual" class="text-3xl font-bold text-orange-400">—</div>
+    </div>
+    <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+      <div class="text-xs text-gray-400 mb-1">Total jobs found</div>
+      <div id="stat-total" class="text-3xl font-bold text-gray-300">—</div>
+    </div>
+  </div>
+
+  <!-- Tab strip -->
+  <div class="flex gap-2 bg-gray-900 border border-gray-800 rounded-2xl p-1">
+    <button onclick="setTab('jobs')"  id="tab-jobs"  class="tab-btn flex-1 py-1.5 rounded-xl text-sm font-medium">Jobs</button>
+    <button onclick="setTab('logs')"  id="tab-logs"  class="tab-btn flex-1 py-1.5 rounded-xl text-sm font-medium">Live Logs</button>
+    <button onclick="setTab('chart')" id="tab-chart" class="tab-btn flex-1 py-1.5 rounded-xl text-sm font-medium">Chart</button>
+  </div>
+
+  <!-- Jobs panel -->
+  <div id="panel-jobs" class="panel space-y-2 hidden"></div>
+
+  <!-- Logs panel -->
+  <div id="panel-logs" class="panel hidden">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs text-gray-400">Live stream</span>
+      <button onclick="clearLogs()" class="text-xs text-gray-500 hover:text-gray-300 transition">Clear</button>
+    </div>
+    <div id="log-panel"
+      class="h-72 overflow-y-auto rounded-xl bg-gray-950 border border-gray-800 p-3 space-y-0.5">
+    </div>
+  </div>
+
+  <!-- Chart panel -->
+  <div id="panel-chart" class="panel hidden">
+    <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+      <div class="text-sm font-semibold mb-4">Applications by status (all time)</div>
+      <div id="chart-bars" class="space-y-3"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast -->
+<div id="toast"
+  class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden
+         bg-gray-800 text-sm px-5 py-2.5 rounded-full shadow-xl border border-gray-700 transition-all">
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let currentTab = 'jobs';
+let allJobs = [];
+let jobFilter = '';
+let statsData = {};
+let eventSource = null;
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setTab('jobs');
+  refresh();
+  setInterval(refresh, 15000);
+  connectLogStream();
+});
+
+async function refresh() {
+  await Promise.all([fetchStatus(), fetchStats(), fetchJobs()]);
+}
+
+// ── Status ───────────────────────────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    const dot = document.getElementById('status-dot');
+    const icon = document.getElementById('banner-icon');
+    const title = document.getElementById('banner-title');
+    const sub = document.getElementById('banner-sub');
+
+    if (s.running) {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-indigo-400 pulse-dot';
+      icon.textContent = '⚙️';
+      title.textContent = 'Cycle running…';
+      sub.textContent = 'Bot is scraping and applying jobs';
+    } else if (s.last_run_result === 'never') {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-gray-600';
+      icon.textContent = '😴';
+      title.textContent = 'Idle — never run';
+      sub.textContent = 'Tap Run Now to start';
+    } else if (s.last_run_result === 'success') {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-green-400';
+      icon.textContent = '✅';
+      title.textContent = 'Last cycle succeeded';
+      sub.textContent = s.last_run ? 'at ' + fmtTime(s.last_run) : '';
+    } else {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-red-400';
+      icon.textContent = '❌';
+      title.textContent = 'Last cycle had an error';
+      sub.textContent = s.last_run_result;
+    }
+  } catch(e) {}
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch('/api/stats');
+    statsData = await r.json();
+    const t = statsData.today || {};
+    const a = statsData.all_time || {};
+    setText('stat-today-applied', t.applied ?? 0);
+    setText('stat-total-applied', a.applied ?? 0);
+    setText('stat-manual', a.manual_needed ?? 0);
+    setText('stat-total', a.total ?? 0);
+    renderChart(a);
+  } catch(e) {}
+}
+
+function renderChart(a) {
+  const el = document.getElementById('chart-bars');
+  if (!a.total) { el.innerHTML = '<div class="text-gray-500 text-sm text-center py-6">No data yet</div>'; return; }
+  const items = [
+    { label:'Applied',       val: a.applied ?? 0,       color:'bg-green-500' },
+    { label:'Manual needed', val: a.manual_needed ?? 0, color:'bg-orange-500' },
+    { label:'Skipped',       val: a.skipped ?? 0,       color:'bg-gray-500' },
+    { label:'Failed',        val: a.failed ?? 0,        color:'bg-red-500' },
+  ];
+  const max = Math.max(...items.map(i => i.val), 1);
+  el.innerHTML = items.map(i => `
+    <div>
+      <div class="flex justify-between text-xs text-gray-400 mb-1">
+        <span>${i.label}</span><span>${i.val}</span>
+      </div>
+      <div class="h-2.5 rounded-full bg-gray-800">
+        <div class="${i.color} h-2.5 rounded-full transition-all duration-700"
+             style="width:${Math.max(2, (i.val/max)*100)}%"></div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Jobs ─────────────────────────────────────────────────────────────────────
+async function fetchJobs() {
+  try {
+    const r = await fetch('/api/jobs?limit=100');
+    allJobs = await r.json();
+    renderJobs();
+  } catch(e) {}
+}
+
+function renderJobs() {
+  const el = document.getElementById('panel-jobs');
+  if (!el) return;
+  let jobs = allJobs;
+  if (jobFilter) jobs = jobs.filter(j => j.status === jobFilter);
+  if (!jobs.length) {
+    el.innerHTML = '<div class="text-gray-500 text-sm text-center py-10">No jobs found</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      ${['','applied','manual_needed','failed','skipped'].map(s =>
+        `<button onclick="setFilter('${s}')"
+           class="filter-btn shrink-0 text-xs px-3 py-1 rounded-full border border-gray-700
+                  ${jobFilter===s?'bg-indigo-600 border-indigo-500 text-white':'bg-gray-800 text-gray-400'}">${s||'All'}</button>`
+      ).join('')}
+    </div>
+    ${jobs.map(j => `
+      <div class="rounded-2xl bg-gray-900 border border-gray-800 p-4">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <a href="${j.url}" target="_blank"
+             class="font-semibold text-sm leading-snug text-indigo-300 hover:underline line-clamp-2">${j.title}</a>
+          <span class="badge-${j.status} shrink-0 text-xs px-2 py-0.5 rounded-full font-medium">${j.status}</span>
+        </div>
+        <div class="text-xs text-gray-400">${j.company||'—'} · ${j.location||'—'}</div>
+        <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+          <span>🎯 ${Math.round(j.match_score ?? 0)}%</span>
+          <span>📅 ${fmtDate(j.discovered_at)}</span>
+          ${j.applied_at ? `<span>✅ ${fmtDate(j.applied_at)}</span>` : ''}
+        </div>
+      </div>`).join('')}
+  `;
+}
+
+function setFilter(f) {
+  jobFilter = f;
+  renderJobs();
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+function connectLogStream() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource('/api/logs/stream');
+  eventSource.onmessage = (e) => {
+    try {
+      const entry = JSON.parse(e.data);
+      appendLog(entry);
+    } catch {}
+  };
+  eventSource.onerror = () => {
+    setTimeout(connectLogStream, 3000);
+  };
+  // Load past logs
+  fetch('/api/logs').then(r => r.json()).then(logs => {
+    const el = document.getElementById('log-panel');
+    el.innerHTML = '';
+    logs.forEach(appendLog);
+  });
+}
+
+function appendLog(entry) {
+  const el = document.getElementById('log-panel');
+  if (!el) return;
+  const line = document.createElement('div');
+  const msg = entry.msg || '';
+  let color = 'text-gray-400';
+  if (msg.includes('ERROR'))   color = 'text-red-400';
+  else if (msg.includes('WARNING')) color = 'text-yellow-400';
+  else if (msg.includes('INFO'))    color = 'text-gray-300';
+  line.className = `leading-5 ${color}`;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLogs() {
+  document.getElementById('log-panel').innerHTML = '';
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function setTab(tab) {
+  currentTab = tab;
+  ['jobs','logs','chart'].forEach(t => {
+    const btn = document.getElementById('tab-' + t);
+    const panel = document.getElementById('panel-' + t);
+    if (t === tab) {
+      btn.classList.add('bg-gray-700','text-white');
+      btn.classList.remove('text-gray-400');
+      panel.classList.remove('hidden');
+    } else {
+      btn.classList.remove('bg-gray-700','text-white');
+      btn.classList.add('text-gray-400');
+      panel.classList.add('hidden');
+    }
+  });
+}
+
+// ── Run trigger ───────────────────────────────────────────────────────────────
+async function triggerRun() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting…';
+  try {
+    const r = await fetch('/api/run', { method: 'POST' });
+    const j = await r.json();
+    showToast(j.ok ? '✅ Cycle started!' : '⚠️ ' + j.message, j.ok ? 'green' : 'orange');
+    if (j.ok) setTab('logs');
+  } catch(e) {
+    showToast('❌ Could not reach server', 'red');
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '▶ Run Now';
+    }, 3000);
+    refresh();
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+  catch { return iso; }
+}
+
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString([], {month:'short',day:'numeric'}); }
+  catch { return iso; }
+}
+
+function showToast(msg, color='gray') {
+  const el = document.getElementById('toast');
+  const map = {green:'text-green-400', orange:'text-orange-400', red:'text-red-400', gray:'text-gray-300'};
+  el.className = `fixed bottom-6 left-1/2 -translate-x-1/2 z-50
+    bg-gray-800 text-sm px-5 py-2.5 rounded-full shadow-xl border border-gray-700 ${map[color]||'text-gray-300'}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3000);
+}
+</script>
+</body>
+</html>

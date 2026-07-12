@@ -30,6 +30,7 @@ from src.job_matcher import JobMatcher
 from src.job_scraper.naukri import NaukriScraper
 from src.email_notifier import EmailNotifier
 from src import database as db
+from src.dashboard import start_dashboard, bot_state
 
 # ─── HARDCODED CONFIG (edit these values directly) ─────────────────
 HARDCODED = {
@@ -405,7 +406,13 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    # ── Mobile dashboard ──
+    dashboard_port = int(os.environ.get("DASHBOARD_PORT", "8080"))
+    bot_state.set_run_fn(run_job_cycle)
+    start_dashboard(port=dashboard_port)
+
     logger.info(f"Scheduler started: running every {interval} minutes")
+    logger.info(f"Dashboard: http://0.0.0.0:{dashboard_port}")
     logger.info(f"Notifications will be sent to: {HARDCODED['NOTIFY_EMAIL'] or 'not configured'}")
     logger.info("Press Ctrl+C to stop")
 
