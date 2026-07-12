@@ -100,24 +100,33 @@ class NaukriScraper(BaseScraper):
         return False
 
     def _login_with_google_sso(self, email: str, password: str) -> bool:
-
-            sso_button = None
-            for locator in [
-                (By.XPATH, "//button[contains(translate(., 'GOOGLE', 'google'), 'google')]"),
-                (By.XPATH, "//*[contains(@class, 'google') and (self::button or self::a)]"),
-                (By.CSS_SELECTOR, "button[data-google-login], a[href*='google']"),
-            ]:
-                try:
-                    sso_button = self._wait_for_clickable(*locator, timeout=8)
-                    if sso_button and sso_button.is_displayed():
-                        break
-                except TimeoutException:
-                    continue
-            if not sso_button:
+        sso_button = None
+        for locator in [
+            (By.XPATH, "//*[contains(translate(normalize-space(.), 'GOOGLE', 'google'), 'google') and (self::button or self::a or @role='button') ]"),
+            (By.XPATH, "//*[contains(translate(@aria-label, 'GOOGLE', 'google'), 'google') or contains(translate(@data-testid, 'GOOGLE', 'google'), 'google')]"),
+            (By.XPATH, "//*[contains(translate(@class, 'GOOGLE', 'google'), 'google') and (self::button or self::a or @role='button' or @tabindex)]"),
+            (By.CSS_SELECTOR, "button[data-google-login], a[href*='google'], [role='button'][class*='google' i]"),
+        ]:
+            try:
+                sso_button = self._wait_for_clickable(*locator, timeout=6)
+                if sso_button and sso_button.is_displayed():
+                    break
+            except TimeoutException:
+                continue
+        if not sso_button:
+            try:
+                page_text = " ".join(self.driver.find_element(By.TAG_NAME, "body").text.split())[:240]
+                logger.error(
+                    "[Naukri] Could not locate Google SSO button; url=%s title=%r page=%r",
+                    self.driver.current_url,
+                    self.driver.title,
+                    page_text,
+                )
+            except Exception:
                 logger.error("[Naukri] Could not locate Google SSO button")
-                if not self.headless:
-                    self._keep_open_on_failure = True
-                return False
+            if not self.headless:
+                self._keep_open_on_failure = True
+            return False
 
             original_handles = set(self.driver.window_handles)
             sso_button.click()
